@@ -470,3 +470,486 @@ void fitglmmaiRPCG_multiV_updateTau(const arma::vec& Yvec, const arma::mat& Xmat
     tauVec.elem(arma::find(tauVec < tol)).zeros();
     
 }
+
+void readPhenoFile(
+    const std::string& phenoFile,
+    const std::string& phenoCol,
+    const std::vector<std::string>& covarColList,
+    const std::vector<std::string>& categoricCovarCol,
+    const std::vector<std::string>& envCovarCol,
+    const bool& MaleOnly,
+    const bool& FemaleOnly,
+    const std::string& sexCol,
+    const std::string& FemaleCode,
+    const std::string& MaleCode,
+    std::vector<std::string>& sampleIDsinPheno,
+    arma::mat& X,
+    std::vector<std::string>& Xname,
+    arma::mat& eMat,
+    arma::vec& pheno
+) {
+    std::ifstream file(phenoFile);
+    if (!file.is_open()) {
+        throw std::runtime_error("ERROR! Unable to open pheno file");
+    }
+
+    std::string line;
+    std::getline(file, line); // Read the header line
+    std::istringstream headerStream(line);
+    std::vector<std::string> columnNames;
+    std::string columnName;
+    char delimiter = (line.find('\t') != std::string::npos) ? '\t' : ' ';
+    while (std::getline(headerStream, columnName, delimiter)) {
+        columnNames.push_back(columnName);
+    }
+
+    // Find the index of the phenotype column
+    auto phenoColIt = std::find(columnNames.begin(), columnNames.end(), phenoCol);
+    if (phenoColIt == columnNames.end()) {
+        throw std::runtime_error("ERROR! Phenotype column not found in pheno file");
+    }
+    size_t phenoColIndex = std::distance(columnNames.begin(), phenoColIt);
+
+    // Find elements that are in covarColList but not in categoricCovarCol
+    std::vector<std::string> numericCovarCol;
+    std::set_difference(
+        covarColList.begin(), covarColList.end(),
+        categoricCovarCol.begin(), categoricCovarCol.end(),
+        std::back_inserter(numericCovarCol)
+    );
+
+    // Find the indices of the covariate columns
+    std::vector<size_t> categoricCovarIndices;
+    if (!categoricCovarCol.empty()) {
+        for (const auto& col : categoricCovarCol) {
+            auto it = std::find(columnNames.begin(), columnNames.end(), col);
+            if (it == columnNames.end()) {
+                throw std::runtime_error("ERROR! Covariate column not found in pheno file: " + col);
+            }
+            categoricCovarIndices.push_back(std::distance(columnNames.begin(), it));
+        }
+    }
+
+    // Find the indices of the covariate columns
+    std::vector<size_t> numericCovarIndices;
+    if (!numericCovarCol.empty()) {
+        for (const auto& col : numericCovarCol) {
+            auto it = std::find(columnNames.begin(), columnNames.end(), col);
+            if (it == columnNames.end()) {
+                throw std::runtime_error("ERROR! Covariate column not found in pheno file: " + col);
+            }
+            numericCovarIndices.push_back(std::distance(columnNames.begin(), it));
+        }
+    }
+
+    // Find the indices of the env covariate columns
+    std::vector<size_t> envCovarIndices;
+    if(!envCovarCol.empty()) {
+        for (const auto& col : envCovarCol) {
+            auto it = std::find(columnNames.begin(), columnNames.end(), col);
+            if (it == columnNames.end()) {
+                throw std::runtime_error("ERROR! Covariate column not found in pheno file: " + col);
+            }
+            envCovarIndices.push_back(std::distance(columnNames.begin(), it));
+        }
+    }
+
+    std::vector<std::vector<double>> covariateData_numeric;
+    std::vector<std::vector<double>> covariateData_env;
+    std::vector<std::vector<std::string>> covariateData_categorical; 
+
+    std::vector<double> phenotypeValues;
+
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        // Find the index of the sample ID column
+        auto sampleIDColIt = std::find(columnNames.begin(), columnNames.end(), "sampleID");
+        if (sampleIDColIt == columnNames.end()) {
+            throw std::runtime_error("ERROR! Sample ID column not found in pheno file");
+        }
+        size_t sampleIDColIndex = std::distance(columnNames.begin(), sampleIDColIt);
+
+        std::string id;
+        for (size_t i = 0; i <= sampleIDColIndex; ++i) {
+            std::getline(iss, id, delimiter);
+        }
+
+        // Check if the line contains missing data (NA)
+        bool hasMissingData = false;
+
+        std::vector<std::string> categoric_covariates(categoricCovarCol.size());
+        std::vector<double> env_covariates(envCovarCol.size());
+        std::vector<double> numeric_covariates(numericCovarCol.size());
+
+        // Read categorical covariates
+        for (size_t i = 0; i < categoricCovarIndices.size(); ++i) {
+            std::string value;
+            for (size_t j = 0; j <= categoricCovarIndices[i]; ++j) {
+                std::getline(iss, value, delimiter);
+            }
+            if (value == "NA") {
+                hasMissingData = true;
+                break;
+            }
+            categoric_covariates[i] = value;
+        }
+
+        // Read numeric covariates
+        for (size_t i = 0; i < numericCovarIndices.size(); ++i) {
+            std::string value;
+            for (size_t j = 0; j <= numericCovarIndices[i]; ++j) {
+                std::getline(iss, value, delimiter);
+            }
+            if (value == "NA") {
+                hasMissingData = true;
+                break;
+            }
+            numeric_covariates[i] = std::stod(value);
+        }
+
+        // Read environmental covariates
+        for (size_t i = 0; i < envCovarIndices.size(); ++i) {
+            std::string value;
+            for (size_t j = 0; j <= envCovarIndices[i]; ++j) {
+                std::getline(iss, value, delimiter);
+            }
+            if (value == "NA") {
+                hasMissingData = true;
+                break;
+            }
+            env_covariates[i] = std::stod(value);
+        }
+
+        std::string value;
+        for (size_t i = 0; i <= phenoColIndex; ++i) {
+            std::getline(iss, value, delimiter);
+        }
+        if (value == "NA") {
+            hasMissingData = true;
+        }
+
+        if (FemaleOnly && MaleOnly) {
+            throw std::runtime_error("Both FemaleOnly and MaleOnly are TRUE. Please specify only one of them as TRUE to run the sex-specific job");
+        } else if (FemaleOnly || MaleOnly) {
+            auto sexColIt = std::find(columnNames.begin(), columnNames.end(), sexCol);
+            if (sexColIt == std::string::npos) {
+                throw std::runtime_error("ERROR! Sex column not found in pheno file");
+            }
+            size_t sexColIndex = std::distance(columnNames.begin(), sexColIt);
+
+            std::string sexval;
+            for (size_t i = 0; i <= sexColIndex; ++i) {
+                std::getline(iss, sexval, delimiter);
+            }
+            if (FemaleOnly) {
+                std::cout << "Female-specific model will be fitted. Samples coded as " << FemaleCode << " in the column " << sexCol << " in the phenotype file will be included" << std::endl;
+                if (sexval != FemaleCode) {
+                    hasMissingData = true;
+                }
+            } else if (MaleOnly) {
+                std::cout << "Male-specific model will be fitted. Samples coded as " << MaleCode << " in the column " << sexCol << " in the phenotype file will be included" << std::endl;
+                if (sexval != MaleCode) {
+                    hasMissingData = true;
+                }
+            }
+        }
+
+        if (!hasMissingData) {
+            sampleIDsinPheno.push_back(id);
+            covariateData_categorical.push_back(categoric_covariates);
+            covariateData_numeric.push_back(numeric_covariates);
+            covariateData_env.push_back(env_covariates);
+            phenotypeValues.push_back(std::stod(value));
+        }
+    }
+
+    file.close();
+
+    // Convert covariateData to arma::mat X
+    // First convert the categorical covariates to factors
+    std::vector<std::vector<int>> factorCovariates;
+    if (!covariateData_categorical.empty()) {
+        for (const auto& covariate : covariateData_categorical) {
+            std::vector<int> factor = asFactor(covariate);
+            size_t numLevels = *std::max_element(factor.begin(), factor.end()) + 1;
+            for (size_t level = 1; level < numLevels; ++level) {
+                std::vector<int> binaryVector(factor.size(), 0);
+                for (size_t i = 0; i < factor.size(); ++i) {
+                    if (factor[i] == level) {
+                        binaryVector[i] = 1;
+                    }
+                }
+                factorCovariates.push_back(binaryVector);
+            }
+        }
+    }
+
+
+    // Combine factor covariates and numeric covariates
+    std::vector<std::vector<double>> combinedCovariates;
+    Xname.push_back("Intercept");
+
+    // Initialize combinedCovariates with the size of covariateData_numeric
+    if (!covariateData_numeric.empty()) {
+        combinedCovariates.resize(covariateData_numeric.size());
+        for (size_t i = 0; i < covariateData_numeric.size(); ++i) {
+            combinedCovariates[i] = covariateData_numeric[i];
+            Xname.push_back(numeric_covariates[i]);
+        }
+    }
+
+    // Add factor covariates to combinedCovariates if not empty
+    std::string factorCovariateName;
+    if (!factorCovariates.empty()) {
+        for (size_t i = 0; i < factorCovariates.size(); ++i) {
+            for (size_t j = 0; j < factorCovariates[i].size(); ++j) {
+                combinedCovariates[j].push_back(static_cast<double>(factorCovariates[i][j]));
+                factorCovariateName = categoricCovarCol[i] + std::to_string(j);
+                Xname.push_back(factorCovariateName);
+
+            }
+        }
+    }
+
+    // Convert combinedCovariates to arma::mat X
+    if (!combinedCovariates.empty()) {
+        X.set_size(combinedCovariates.size(), combinedCovariates[0].size() + 1);
+        for (size_t i = 0; i < combinedCovariates.size(); ++i) {
+            X(i, 0) = 1.0; // Intercept column with 1s
+            for (size_t j = 0; j < combinedCovariates[i].size(); ++j) {
+                X(i, j + 1) = combinedCovariates[i][j];
+            }
+        }
+    } else {
+        X.set_size(sampleIDsinPheno.size(), 1);
+        X.fill(1.0); // Only intercept column with 1s
+    }
+
+    // Convert env_covariates to arma::mat eMat if not empty
+    if (!covariateData_env.empty()) {
+        std::vector<std::vector<double>> combinedEnvCovariates;
+        for (size_t i = 0; i < covariateData_env.size(); ++i) {
+            combinedEnvCovariates.push_back(covariateData_env[i]);
+        }
+
+        // Convert combinedEnvCovariates to arma::mat eMat
+        eMat.set_size(combinedEnvCovariates.size(), combinedEnvCovariates[0].size());
+        for (size_t i = 0; i < combinedEnvCovariates.size(); ++i) {
+            for (size_t j = 0; j < combinedEnvCovariates[i].size(); ++j) {
+                eMat(i, j) = combinedEnvCovariates[i][j];
+            }
+        }
+    }
+
+    // Convert phenotypeValues to arma::vec pheno
+    pheno.set_size(phenotypeValues.size());
+    for (size_t i = 0; i < phenotypeValues.size(); ++i) {
+        pheno(i) = phenotypeValues[i];
+    }
+    std::cout << sampleIDsinPheno.size() << " samples found in pheno file" << std::endl;
+}
+
+void readSampleIDsFromFamFile(const std::string& famFile, std::vector<std::string>& sampleIDsinfamFile) {
+    if (!famFile.empty()) {
+        std::ifstream famfile(famFile);
+        if (!famfile.is_open()) {
+            throw std::runtime_error("ERROR! Unable to open fam file");
+        }
+        std::string line;
+        while (std::getline(famfile, line)) {
+            std::istringstream iss(line);
+            std::string id;
+            iss >> id >> id; // Skip the first column and read the second column
+            sampleIDsinfamFile.push_back(id);
+        }
+        famfile.close();
+        std::cout << sampleIDsinfamFile.size() << " samples found in fam file" << std::endl;
+    }
+}
+
+
+void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<std::string>& sampleIDs, const std::string sampleIDFileName) {
+    if (!sampleIDFile.empty()) {
+        std::ifstream file(sampleIDFile);
+        if (!file.is_open()) {
+            throw std::runtime_error("ERROR! Unable to open sample ID file", sampleIDFile);
+        }
+        std::string line;
+        while (std::getline(file, line)) {
+            sampleIDs.insert(line);
+        }
+        file.close();
+        std::cout << sampleIDs.size() << " samples found in sample ID file " << sampleIDFileName << std::endl;
+    }
+}
+
+
+
+arma::vec getPCG1ofSigmaAndVector(arma::vec& wVec,  arma::vec& tauVec, arma::vec& bVec, int maxiterPCG, double tolPCG, bool LOCO, const arma::sp_mat & spSigma, const arma::ivec& Ivec_start_indices, const arma::mat& eMat){
+    int Nnomissing = wVec.n_elem;
+    arma::vec xVec(Nnomissing);
+    xVec.zeros();
+    std::cout << "g_isStoreSigma " << g_isStoreSigma << std::endl;
+    if(spSigma.n_rows > 0){
+        xVec = arma::spsolve(spSigma, bVec);
+    }else{
+        arma::vec rVec = bVec;
+        arma::vec r1Vec;
+        arma::vec crossProdVec(Nnomissing);
+        arma::vec zVec(Nnomissing);
+        arma::vec minvVec(Nnomissing);
+        if(eMat.n_rows > 0){
+                minvVec = 1/getDiagOfSigma_multiV_eMat(wVec, tauVec, LOCO);
+        }else{
+                minvVec = 1/getDiagOfSigma_multiV(wVec, tauVec, LOCO);
+        }
+
+        zVec = minvVec % rVec;
+
+        double sumr2 = sum(rVec % rVec);
+        arma::vec z1Vec(Nnomissing);
+        arma::vec pVec = zVec;
+
+        int iter = 0;
+        arma::colvec ApVec;
+        while (sumr2 > tolPCG && iter < maxiterPCG) {
+                iter = iter + 1;
+                if(g_EMat.n_rows > 0){
+                        ApVec = getCrossprod_multiV_eMat(pVec, wVec, tauVec, LOCO);
+                }else{
+                        ApVec = getCrossprod_multiV(pVec, wVec, tauVec, LOCO);
+                }
+                arma::vec preA = (rVec.t() * zVec)/(pVec.t() * ApVec);
+                double a = preA(0);
+                xVec = xVec + a * pVec;
+                r1Vec = rVec - a * ApVec;
+                z1Vec = minvVec % r1Vec;
+
+                arma::vec Prebet = (z1Vec.t() * r1Vec)/(zVec.t() * rVec);
+                double bet = Prebet(0);
+                pVec = z1Vec + bet * pVec;
+                zVec = z1Vec;
+                rVec = r1Vec;
+                sumr2 = sum(rVec % rVec);
+        }
+
+        if (iter >= maxiterPCG){
+                cout << "pcg did not converge. You may increase maxiter number." << endl;
+        }
+        cout << "iter from getPCG1ofSigmaAndVector " << iter << endl;
+    }
+    return xVec;
+}
+
+
+arma::vec getDiagOfSigma(arma::vec& wVec, arma::vec& tauVec, bool LOCO, const bool isGRM, const bool isspGRM, const sp_mat & spGRM, const arma::ivec& Ivec_start_indices, const arma::mat& eMat, const arma::vec & EEt_eigenvalVec, const arma::vec & REEt_diagVec, const arma::mat & EEt_eigenvecMat, const NullGENO::NullGenoClass* ptr_gNULLGENOobj) {
+    int Nnomissing = wVec.n_elem;
+    arma::vec diagVec(Nnomissing);
+    arma::vec diagVec0(Nnomissing);
+    diagVec0.zeros();
+    arma::sp_vec diagVecV0;
+    arma::vec diagVecG, diagVecV, diagVecG_I, diagVecV_I;
+    unsigned int tauind = 0;
+
+    if (Ivec_start_indices.n_elem == 0) {
+        if (isGRM) {
+            if (!(ptr_gNULLGENOobj->setKinDiagtoOne)) {
+                if (!isspGRM) {
+                    if (!LOCO) {
+                        int MminMAF = ptr_gNULLGENOobj->getnumberofMarkerswithMAFge_minMAFtoConstructGRM();
+                        diagVec = tauVec(1) * (*ptr_gNULLGENOobj->Get_Diagof_StdGeno()) / MminMAF + tauVec(0) / wVec;
+                    } else {
+                        diagVec = tauVec(1) * (*ptr_gNULLGENOobj->Get_Diagof_StdGeno_LOCO());
+                        int Msub_MAFge_minMAFtoConstructGRM_in_b = ptr_gNULLGENOobj->getMsub_MAFge_minMAFtoConstructGRM_in();
+                        int Msub_MAFge_minMAFtoConstructGRM_singleVar_b = ptr_gNULLGENOobj->getMsub_MAFge_minMAFtoConstructGRM_singleChr_in();
+                        diagVec = diagVec / (Msub_MAFge_minMAFtoConstructGRM_in_b - Msub_MAFge_minMAFtoConstructGRM_singleVar_b) + tauVec(0) / wVec;
+                    }
+                    tauind = tauind + 2;
+                } else {
+                    diagVec = tauVec(0) / wVec;
+                    tauind = tauind + 1;
+                    diagVecG = spGRM.diag();
+                    diagVec = diagVec + tauVec(tauind) * diagVecG;
+                    tauind = tauind + 1;
+                }
+            } else {
+                diagVec = tauVec(1) + tauVec(0) / wVec;
+                tauind = tauind + 2;
+            }
+        } else {
+            diagVec = tauVec(0) / wVec;
+            tauind = tauind + 1;
+        }
+    } else {
+        diagVec = tauVec(0) / wVec;
+        tauind = tauind + 1;
+        if (isGRM && isspGRM) {
+            diagVecG = spGRM.diag();
+            diagVecG_I = diagVecG.elem(g_I_longl_vec);
+            diagVec = diagVec + tauVec(tauind) * diagVecG_I;
+            tauind = tauind + 1;
+        } else {
+            diagVec = diagVec + tauVec(tauind);
+            tauind = tauind + 1;
+        }
+    }
+
+    if (Ivec_start_indices.n_elem == 0) {
+        if (isGRM) {
+            if (!(ptr_gNULLGENOobj->setKinDiagtoOne)) {
+                if (!isspGRM) {
+                    if (!LOCO) {
+                        int MminMAF = ptr_gNULLGENOobj->getnumberofMarkerswithMAFge_minMAFtoConstructGRM();
+                        diagVec0.zeros();
+                        for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
+                            diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * ((*ptr_gNULLGENOobj->Get_Diagof_StdGeno()) / MminMAF) % arma::square(EEt_eigenvecMat.col(i));
+                        }
+                    } else {
+                        int Msub_MAFge_minMAFtoConstructGRM_in_b = ptr_gNULLGENOobj->getMsub_MAFge_minMAFtoConstructGRM_in();
+                        int Msub_MAFge_minMAFtoConstructGRM_singleVar_b = ptr_gNULLGENOobj->getMsub_MAFge_minMAFtoConstructGRM_singleChr_in();
+                        diagVec0.zeros();
+                        for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
+                            diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * ((*ptr_gNULLGENOobj->Get_Diagof_StdGeno_LOCO()) / (Msub_MAFge_minMAFtoConstructGRM_in_b - Msub_MAFge_minMAFtoConstructGRM_singleVar_b)) % arma::square(EEt_eigenvecMat.col(i));
+                        }
+                    }
+                } else {
+                    diagVec0.zeros();
+                    for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
+                        diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * (g_spGRM.diag()) % arma::square(EEt_eigenvecMat.col(i));
+                    }
+                }
+                diagVec = diagVec + tauVec(tauind) * diagVec0;
+            } else {
+                diagVec = tauVec(1) + tauVec(0) / wVec;
+                tauind = tauind + 2;
+                diagVec0.zeros();
+                for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
+                    diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * arma::square(EEt_eigenvecMat.col(i));
+                }
+                diagVec = diagVec + tauVec(tauind) * diagVec0;
+            }
+        }
+        tauind = tauind + 1;
+    } else {
+        if (isGRM && isspGRM) {
+            diagVecG = spGRM.diag();
+            diagVecG_I = diagVecG.elem(g_I_longl_vec);
+            diagVec0.zeros();
+            for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
+                diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * diagVecG_I % arma::square(EEt_eigenvecMat.col(i));
+            }
+            diagVec = diagVec + tauVec(tauind) * diagVec0;
+        } else {
+            diagVec = diagVec + tauVec(tauind) * REEt_diagVec;
+        }
+        tauind = tauind + 1;
+    }
+
+    for (unsigned int i = 0; i < Nnomissing; i++) {
+        if (diagVec(i) < 1e-4) {
+            diagVec(i) = 1e-4;
+        }
+    }
+
+    return diagVec;
+}
