@@ -166,7 +166,7 @@ void fitNULLGLMM(const Parameters& params) {
     }
 
 
-    GLMMResults modglmm = glmmkin_ai_PCG_Rcpp_multiV(
+    GLMMResults modglmm = glmmkin_ai_PCG(
         ptr_gNULLGENOobj,
         X,
         pheno,
@@ -207,7 +207,7 @@ void fitNULLGLMM(const Parameters& params) {
 
 
 // Function to fit the null generalized linear mixed model
-GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
+GLMMResults glmmkin_ai_PCG(
     const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
     const arma::mat& X,
     const arma::vec& y,
@@ -410,8 +410,8 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
             glmmResult.LOCOResult.push_back(glmmResultLOCO);
 
         }
-        glmmResult.chromosomeStartIndexVec <- chromosomeStartIndexVec;
-        glmmResult.chromosomeEndIndexVec <- chromosomeEndIndexVec;
+        glmmResult.chromosomeStartIndexVec = chromosomeStartIndexVec;
+        glmmResult.chromosomeEndIndexVec =  chromosomeEndIndexVec;
         
     }
     return glmmResult;
