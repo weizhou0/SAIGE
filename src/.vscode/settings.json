@@ -70,6 +70,7 @@
         "iterator": "cpp",
         "utility": "cpp",
         "filesystem": "cpp",
-        "__memory": "cpp"
+        "__memory": "cpp",
+        "__functional_03": "cpp"
     }
 }
