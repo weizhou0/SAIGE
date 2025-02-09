@@ -237,12 +237,10 @@ void fitNULLGLMM_multiV(const Parameters& params) {
 
     }
 
-    // Output the results
-    //std::cout << "Transformed Y: " << result.Y.t() << std::endl;
-    //std::cout << "Transformed X1_new: " << result.X1_new << std::endl;
-    //std::cout << "QR decomposition matrix qrr: " << result.qrr << std::endl;
-    //std::cout << "Indices of non-finite coefficients: " << result.idx_na.t() << std::endl;
- 
+
+    GLMMResults modglmm = glmmkin_ai_PCG_Rcpp_multiV(ptr_gNULLGENOobj, X, pheno, traitType, offset, var_weights, sampleIDsinPhenonew, isCovariateOffset, tau, fixtau, params.maxiter, params.tol, params.verbose, params.nrun, params.tolPCG, params.maxiterPCG, result.subPheno, result.indicatorGenoSamplesWithPheno, result.out_transform, result.tauInit, params.memoryChunk, params.LOCO, result.chromosomeStartIndexVec, result.chromosomeEndIndexVec, params.traceCVcutoff, result.isCovariateTransform, result.isDiagofKinSetAsOne, params.isLowMemLOCO, result.covarianceIdxMat, params.isStoreSigma, params.useSparseGRMtoFitNULL, params.useGRMtoFitNULL, params.isSparseGRMIdentity);
+    
+
 
 }
 
@@ -281,8 +279,7 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
     bool isStoreSigma,
     bool useSparseGRMtoFitNULL,
     bool useGRMtoFitNULL,
-    bool isSparseGRMIdentity,
-    NullGENO::NullGenoClass* ptr_gNULLGENOobj
+    bool isSparseGRMIdentity
 ) {
 
     GLMMResults glmmResult;
