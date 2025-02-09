@@ -81,3 +81,83 @@ std::vector<T> subsetVector(const std::vector<T>& vec, const arma::uvec& indices
     }
     return subset;
 }
+
+struct CovariateTransformResult {
+    arma::vec Y;
+    arma::mat X1_new;
+    arma::mat qrr;
+    std::vector<std::string> X_name;
+    arma::uvec idx_na;
+};
+
+CovariateTransformResult Covariate_Transform(const arma::mat& X1, const arma::vec& Y, const std::vector<std::string>& X_name) {
+    arma::mat X1_copy = X1;
+    arma::vec coef = arma::solve(X1_copy, Y);
+    arma::uvec idx_na = arma::find_nonfinite(coef);
+
+    if (!idx_na.is_empty()) {
+        X1_copy.shed_cols(idx_na);
+        std::cerr << "Warning: multi collinearity is detected in covariates! Columns will be excluded in the model\n";
+    }
+
+    arma::mat qrr;
+    arma::mat X1_Q;
+    arma::qr(X1_Q, qrr, X1_copy);
+
+    int N = X1_copy.n_rows;
+    arma::mat X1_new = X1_Q * std::sqrt(N);
+
+    CovariateTransformResult result;
+    result.Y = Y;
+    result.X1_new = X1_new;
+    result.qrr = qrr;
+    result.X_name = {}; // Placeholder for column names
+    result.idx_na = idx_na;
+
+    return result;
+
+
+void set_Ivec_start_indices(const std::vector<std::string>& modelID, arma::uvec & Ivec_start_indices) {
+    std::vector<int> b = asFactor(modelID);
+    arma::uvec unique_vals = arma::unique(b); // Automatically sorted
+    Ivec_start_indices.set_size(unique_vals.n_elem); // Storage for start indices
+
+    // Find start indices for each unique value
+    for (size_t i = 0; i < unique_vals.n_elem; ++i) {
+            Ivec_start_indices(i) = arma::as_scalar(arma::find(modelID == unique_vals(i), 1, "first"));
+    }
+    Ivec_start_indices.insert_rows(Ivec_start_indices.n_elem, 1);
+    Ivec_start_indices[Ivec_start_indices.n_elem-1] = Ivec_start_indices.n_rows;
+    /*int n = b.size();
+    int max_b = *std::max_element(b.begin(), b.end()) + 1;
+    
+    arma::sp_mat I_mat(n, max_b);
+    for (int i = 0; i < n; ++i) {
+        I_mat(i, b[i]) = 1.0;
+    }
+
+    set_I_longl_mat(I_mat, b);
+    */
+}
+
+// Function to check for perfect separation in a dataset
+void checkPerfectSep(arma::mat& X1, const arma::vec& Y, std::vector<std::string>& X_name, int minCovariateCount) {
+    std::vector<std::string> colnamesDelete;
+    int q = X1.n_cols;
+
+    for (int i = 0; i < q; ++i) {
+        arma::vec column = X1.col(i);
+        if (arma::unique(column).n_elem == 2) {
+            arma::umat sumTable = arma::hist(Y, column);
+            if (arma::any(sumTable < minCovariateCount)) {
+                colnamesDelete.push_back(X_name[i]);
+                std::cout << "less than " << minCovariateCount << " samples in a covariate detected! " << X_name[i] << " will be excluded in the model\n";
+            }
+            X1.shed_col(i);
+            X_name.erase(X_name.begin() + i);
+            --i; // Adjust index after erasing element
+            --q; // Adjust total column count
+        }
+    }
+    return colnamesDelete;
+}

@@ -123,7 +123,8 @@ void fitNULLGLMM_multiV(const Parameters& params) {
     std::vector<std::string> sampleIDsinPheno, sampleIDsinfamFile, sampleIDsinsparseGRMFile, sampleIDsinSampleIncludeFile;
     arma::mat X, eMat;
     arma::vec pheno;
-    readPhenoFile(params.phenoFile, params.phenoCol, params.covarColList, params.categoricCovarCol, params.envCovarCol, params.MaleOnly, params.FemaleOnly, params.sexCol, params.FemaleCode, params.MaleCode, sampleIDsinPheno, X, eMat, pheno);
+    std::string Xname;
+    readPhenoFile(params.phenoFile, params.phenoCol, params.covarColList, params.categoricCovarCol, params.envCovarCol, params.MaleOnly, params.FemaleOnly, params.sexCol, params.FemaleCode, params.MaleCode, sampleIDsinPheno, X, Xname, eMat, pheno);
     readSampleIDsFromFamFile(params.famFile, sampleIDsinfamFile);
     readSampleIDsFromSingleColFile(params.sparseGRMSampleIDFile, sampleIDsinsparseGRMFile, "sparseGRMFile");
     readSampleIDsFromSingleColFile(params.SampleIDIncludeFile, sampleIDsinSampleIncludeFile, "SampleIDIncludeFile");
@@ -178,8 +179,26 @@ void fitNULLGLMM_multiV(const Parameters& params) {
     X = X.rows(sampleIndices);
     eMat = eMat.rows(sampleIndices);
     pheno = pheno.elem(sampleIndices);
+    std::vector<std::string> sampleIDsinPhenonew = subsetVector(sampleIDsinPheno, sampleIndices);
 
-    std::string sampleIDsinPhenonew = sampleIDsinPheno
+    // Check if the trait type is quantitative and inverse normalize the phenotype
+    if (traitType == "quantitative" && params.invNormalize) {
+        std::cout << "Perform the inverse normalization for " << params.phenoCol << std::endl;
+
+        arma::vec ranks = arma::conv_to<arma::vec>::from(arma::sort_index(pheno) + 1);
+        arma::vec invPheno = arma::norminv((ranks - 0.5) / ranks.n_elem);
+
+        for (size_t i = 0; i < pheno.n_elem; ++i) {
+            pheno(i) = invPheno(i);
+        }
+    }
+
+    if ((traitType == "binary" || traitType == "tte" )& (length(covarColList) > 0)) {
+        checkPerfectSep(X1, pheno, Xname, minCovariateCount);
+    }   
+
+    // Call the Covariate_Transform function
+    CovariateTransformResult result = Covariate_Transform(X1, pheno, Xname);
 
     // Subset the sparse GRM file
     if (!params.sparseGRMFile.empty()) {
@@ -187,73 +206,57 @@ void fitNULLGLMM_multiV(const Parameters& params) {
         arma::sp_mat sparseGRM = readSparseGRM(params.sparseGRMFile, sampleIndicesSparseGRM);
     }
 
+    arma::uvec sampleIndicesinFam = findSampleIndices(sampleIDsinfamFile, overlappedSamples);
 
+    NullGENO::NullGenoClass gNULLGENOobj;
+    NullGENO::NullGenoClass* ptr_gNULLGENOobj = nullptr;
 
-
-
-}
-
-
-
-void fitNullGLMM(const Parameters& params) {
-    std::cout << "Fitting null GLMM" << std::endl;
-    // 
-}
-struct GLMResults {
-    arma::vec beta;
-    arma::vec eta;
-    arma::vec mu;
-    arma::vec W;
-    arma::vec z;
-};
-
-GLMResults fitGLM(const arma::mat& X, const arma::vec& y, const std::string& family) {
-    GLMResults results;
-    results.beta = stats::glm(X, y, 
-        (family == "logistic") ? stats::glm_family::logistic :
-        (family == "poisson") ? stats::glm_family::poisson :
-        (family == "gaussian") ? stats::glm_family::gaussian :
-        throw std::invalid_argument("Invalid family type. Use 'logistic', 'poisson', or 'gaussian'.")
-    );
-
-    results.eta = X * results.beta;  // Linear predictor
-    
-    if (family == "logistic") {
-        results.mu = 1 / (1 + arma::exp(-results.eta)); // Sigmoid function
-        results.W = results.mu % (1 - results.mu);      // IRLS weights
-    } else if (family == "poisson") {
-        results.mu = arma::exp(results.eta); // Poisson mean
-        results.W = results.mu;              // IRLS weights
-    } else if (family == "gaussian") { 
-        results.mu = results.eta; 
-        results.W = arma::ones(results.mu.n_elem); // Constant weights for OLS
+    if (!sampleIndicesinFam.is_empty()) {
+        std::vector<bool> indicatorGenoSamplesWithPheno(sampleIDsinfamFile.size(), false);
+        for (size_t i = 0; i < sampleIndicesinFam.n_elem; ++i) {
+            indicatorGenoSamplesWithPheno[sampleIndicesinFam[i]] = true;
+        }
+        gNULLGENOobj.setGenoObj(params.bedFile, params.bimFile, params.famFile, sampleIndicesinFam, indicatorGenoSamplesWithPheno, params.memoryChunk, params.isDiagofKinSetAsOne);
+        ptr_gNULLGENOobj = &gNULLGENOobj;
     }
 
-    results.z = results.eta + (y - results.mu) / results.W; // Adjusted response
+    // Check for duplicates in overlappedSamples
+    std::set<std::string> uniqueSamples;
+    bool hasDuplicates = false;
+    for (const auto& sample : overlappedSamples) {
+        if (!uniqueSamples.insert(sample).second) {
+            hasDuplicates = true;
+            break;
+        }
+    }
+    arma::uvec Ivec_start_indices;
+    if (hasDuplicates) {
+        std::cout << "Duplicated IDs were found " << std::endl;
+        std::cout << overlappedSamples.size() << " observations will be used for analysis" << std::endl;
+        set_Ivec_start_indices(sampleIDsinPhenonew, Ivec_start_indices);
 
-    return results;
+    }
+
+    // Output the results
+    //std::cout << "Transformed Y: " << result.Y.t() << std::endl;
+    //std::cout << "Transformed X1_new: " << result.X1_new << std::endl;
+    //std::cout << "QR decomposition matrix qrr: " << result.qrr << std::endl;
+    //std::cout << "Indices of non-finite coefficients: " << result.idx_na.t() << std::endl;
+ 
+
 }
 
 
-//GLMResults logistic_results = fitGLM(X, y_logistic, "logistic");
-
-
-
-
 // Function to fit the null generalized linear mixed model
-arma::mat model_matrix(const arma::mat& fit0) {
-  // Extract the model matrix from the fit0 object
-  return fit0;
-}
-
-// Function to fit the null generalized linear mixed model
-arma::mat glmmkin_ai_PCG_Rcpp_multiV_eMat(
-    const std::string& bedFile,
-    const std::string& bimFile,
-    const std::string& famFile,
-    const arma::mat& Xorig,
+GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
+    const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
+    const arma::mat& X,
+    const arma::vec& y,
+    const std::string& family,
+    const arma::vec& offset,
+    const arma::vec& var_weights,
+    const std::vector<std::string>& sampleIDsinPheno,
     bool isCovariateOffset,
-    const arma::mat& fit0,
     arma::vec tau,
     arma::vec fixtau,
     int maxiter,
@@ -264,7 +267,6 @@ arma::mat glmmkin_ai_PCG_Rcpp_multiV_eMat(
     int maxiterPCG,
     const arma::mat& subPheno,
     const arma::vec& indicatorGenoSamplesWithPheno,
-    const arma::mat& obj_noK,
     const arma::mat& out_transform,
     const arma::vec& tauInit,
     double memoryChunk,
@@ -279,61 +281,39 @@ arma::mat glmmkin_ai_PCG_Rcpp_multiV_eMat(
     bool isStoreSigma,
     bool useSparseGRMtoFitNULL,
     bool useGRMtoFitNULL,
-    bool isSparseGRMIdentity
+    bool isSparseGRMIdentity,
+    NullGENO::NullGenoClass* ptr_gNULLGENOobj
 ) {
-    // Initialize variables
-    arma::vec subSampleInGeno = subPheno.col(0);
-    if (subSampleInGeno.is_empty()) {
-        subSampleInGeno = subPheno.col(1);
-    }
 
-    if (verbose) {
-        std::cout << "Start reading genotype plink file here" << std::endl;
-    }
+    GLMMResults glmmResult;
 
-    // Set duplicate sample index
-    arma::vec dup_sample_index = arma::conv_to<arma::vec>::from(arma::unique(subPheno.col(2)));
-
-    if (verbose) {
-        std::cout << "Genotype reading is done" << std::endl;
-    }
-
-    if (LOCO) {
-        // Update chromosome start and end indices
-        // ... (code to update chromosome indices)
-    }
-
-    arma::vec y = fit0.col(0);
     int n = y.n_elem;
-    arma::mat X = model_matrix(fit0);
-    arma::vec offset = fit0.col(1);
     if (offset.is_empty()) {
         offset = arma::zeros(n);
     }
-
-    arma::vec var_weights = fit0.col(2);
-    arma::vec eta = fit0.col(3);
-    arma::vec mu = fit0.col(4);
-    arma::vec mu_eta = eta; // Placeholder for family["mu.eta"](eta)
-    arma::vec Y = eta - offset + (y - mu) / mu_eta;
-
     if (var_weights.is_empty()) {
-        var_weights = arma::ones(mu_eta.n_elem);
+        var_weights = arma::ones(n);
     }
 
-    arma::vec sqrtW = mu_eta / arma::sqrt(1 / var_weights % mu); // Placeholder for family["variance"](mu)
-    arma::vec W = sqrtW % sqrtW;
+    GLMResults fit0 = fitGLM(X, y, traitType);
+    arma::vec eta = fit0.eta
+    arma::vec mu = fit0.mu
+    arma::vec mu_eta = fit0.mu_eta(eta); // family["mu.eta"](eta)
+    arma::vec Y = eta - offset + (y - mu) / mu_eta;
+    arma::vec sqrtW = mu_eta / arma::sqrt(1 / var_weights % fit0.variance(mu)); // family["variance"](mu)
+    arma::vec W = arma::square(sqrtW);
+    arma::vec alpha = fit0.beta;
+    arma::vec eta = eta;
 
-    arma::vec alpha0 = fit0.col(5);
-    arma::vec eta0 = eta;
 
     tau.zeros();
-    if (true) { // Placeholder for family["family"] == "poisson" || family["family"] == "binomial"
+
+    if (fit0.family == "poisson" || fit0.family == "binomial") { 
         tau[0] = 1;
         fixtau[0] = 1;
         tauInit[0] = 1;
         arma::uvec idxtau = arma::find(fixtau == 0);
-        if (arma::sum(tauInit(idxtau)) == 0) {
+        if (arma::accu(tauInit(idxtau)) == 0) {
             tau(idxtau).fill(0.1);
         } else {
             tau(idxtau) = tauInit(idxtau);
@@ -350,93 +330,42 @@ arma::mat glmmkin_ai_PCG_Rcpp_multiV_eMat(
             tau(arma::find(fixtau == 0)) = tauInit(arma::find(fixtau == 0));
         }
     }
+    arma::mat cov;
+    const GLMResults* fit0ptr = &fit0; 
+    Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
 
-    if (!covarianceIdxMat.is_empty()) {
-        arma::uvec idxtau2 = arma::intersect(covarianceIdxMat.col(0), arma::find(fixtau == 0));
-        if (!idxtau2.is_empty()) {
-            tau(idxtau2).zeros();
-        }
-        arma::vec Kmatdiag = arma::ones(tau.n_elem - 1); // Placeholder for getMeanDiagofKmat(LOCO)
-        tau.subvec(1, tau.n_elem - 1) /= Kmatdiag;
-    }
+    arma::mat AI;
+    arma::vec YPAPY, Trace, PY;
 
-    if (isSparseGRMIdentity) {
-        tau[1] = 0;
-    }
-
-    // Placeholder for Get_Coef_multiV function
-    arma::mat re_coef_Y = Y;
-    arma::vec re_coef_W = W;
-    arma::vec re_coef_Sigma_iY = Y;
-    arma::mat re_coef_Sigma_iX = X;
-    arma::mat re_coef_cov = X;
-    arma::vec re_coef_alpha = alpha0;
-    arma::vec re_coef_eta = eta;
-    arma::vec re_coef_mu = mu;
-
-    // Placeholder for getAIScore_multiV_eMat function
-    arma::vec re_YPAPY = arma::ones(n);
-    arma::vec re_Trace = arma::ones(n);
+    getAIScore(Y, X, W, tau, fixtau, Sigma_iY, Sigma_iX, cov, AI, YPAPY, Trace, PY, k1, nrun, maxiterPCG, tolPCG, traceCVcutoff, LOCO, Ivec_start_indices, Tvec_start_indices, eMat);
 
     arma::vec tau0 = tau;
     arma::vec tau0_q2 = tau(arma::find(fixtau == 0));
     arma::vec tau_q2 = arma::max(arma::zeros(tau0_q2.n_elem), tau0_q2 + tau0_q2 % tau0_q2 % (re_YPAPY - re_Trace) / n);
     tau(arma::find(fixtau == 0)) = tau_q2;
 
-    if (!covarianceIdxMat.is_empty()) {
-        tau(arma::find(fixtau == 0) % arma::intersect(covarianceIdxMat.col(0), arma::find(fixtau == 0))).zeros();
-    }
 
     if (verbose) {
         std::cout << "Variance component estimates:" << std::endl;
         tau.print();
     }
 
-    int maxiter_in = maxiter;
-    if (isSparseGRMIdentity) {
-        tau[1] = 0;
-        maxiter_in = 0;
-        alpha0 = re_coef_alpha;
-        tau0 = tau;
-        eta0 = eta;
-    }
-
-    for (int i = 0; i < maxiter_in; ++i) {
+    for (int i = 0; i < maxiter; ++i) {
         if (verbose) {
             std::cout << "\nIteration " << i << " " << tau << ":\n";
         }
-        alpha0 = re_coef_alpha;
+        alpha0 = alpha;
         tau0 = tau;
         eta0 = eta;
 
-        // Placeholder for Get_Coef_multiV function
-        re_coef_Y = Y;
-        re_coef_W = W;
-        re_coef_Sigma_iY = Y;
-        re_coef_Sigma_iX = X;
-        re_coef_cov = X;
-        re_coef_alpha = alpha0;
-        re_coef_eta = eta;
-        re_coef_mu = mu;
+        Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
 
-        // Placeholder for fitglmmaiRPCG_multiV_eMat function
-        arma::vec fit_tau = tau;
-        arma::mat fit_cov = X;
-        arma::vec fit_alpha = alpha0;
-        arma::vec fit_eta = eta;
-        arma::vec fit_Y = Y;
-        arma::vec fit_mu = mu;
+        fitglmmaiRPCG_multiV_updateTau(Y, X, W, tau, fixtau, Sigma_iY, Sigma_iX, cov, alpha, nrun, maxiterPCG, tolPCG, tol, traceCVcutoff, LOCO);
 
-        tau = fit_tau;
-        re_coef_cov = fit_cov;
-        re_coef_alpha = fit_alpha;
-        re_coef_eta = fit_eta;
-        re_coef_Y = fit_Y;
-        re_coef_mu = fit_mu;
 
-        mu_eta = eta; // Placeholder for family["mu.eta"](eta)
-        sqrtW = mu_eta / arma::sqrt(1 / var_weights % mu); // Placeholder for family["variance"](mu)
-        W = sqrtW % sqrtW;
+        mu_eta = fit0.mu_eta(eta);
+        sqrtW = mu_eta / arma::sqrt(1 / var_weights % fit0.variance(mu));
+        W = arma::square(sqrtW);
 
         if (arma::max(arma::abs(tau - tau0) / (arma::abs(tau) + arma::abs(tau0) + tol)) < tol) {
             break;
@@ -449,77 +378,86 @@ arma::mat glmmkin_ai_PCG_Rcpp_multiV_eMat(
         }
     }
 
-    if (verbose) {
-        std::cout << "\nFinal " << tau << ":\n";
-    }
+    std::cout << "\nFinal " << tau << ":\n";
+    Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+    bool converged = (i <= maxiter);
 
-    // Placeholder for Get_Coef_multiV function
-    re_coef_Y = Y;
-    re_coef_W = W;
-    re_coef_Sigma_iY = Y;
-    re_coef_Sigma_iX = X;
-    re_coef_cov = X;
-    re_coef_alpha = alpha0;
-    re_coef_eta = eta;
-    re_coef_mu = mu;
-
-    arma::vec res = y - re_coef_mu;
+    arma::vec res = y - mu;
     arma::vec mu2;
     std::string traitType;
-    if (true) { // Placeholder for family["family"] == "binomial"
-        mu2 = re_coef_mu % (1 - re_coef_mu);
-        traitType = "binary";
-    } else if (false) { // Placeholder for family["family"] == "poisson"
-        mu2 = re_coef_mu;
-        traitType = "count";
-    } else if (false) { // Placeholder for family["family"] == "gaussian"
-        mu2 = arma::ones(res.n_elem) / tau[0];
-        traitType = "quantitative";
-    }
+
+    arma::vec mu2 = (1/tau[0])*fit0.variance(mu);
 
     arma::vec mu2_rescaled = mu2 % var_weights;
     arma::vec y_rescaled = y % var_weights;
-    arma::vec mu_rescaled = re_coef_mu % var_weights;
+    arma::vec mu_rescaled = mu % var_weights;
 
     // Placeholder for ScoreTest_NULL_Model function
-    arma::mat obj_noK_rescaled = X;
+    SA_NULL scoreTestResult;
+    if (!isCovariateOffset) {
+        scoreTestResult = ScoreTest_NULL_Model(mu, mu2, y, X);
+    } else {
+        scoreTestResult = ScoreTest_NULL_Model(mu, mu2, y, Xorig);
+    }
+    
+    glmmResult.theta = tau;
+    glmmResult.coefficients = alpha;
+    glmmResult.linear_predictors = eta;
+    glmmResult.fitted_values = mu;
+    glmmResult.Y = Y;
+    glmmResult.residuals = res;
+    glmmResult.cov = cov;
+    glmmResult.converged = converged;
+    glmmResult.sampleID = sampleIDsinPheno;
+    glmmResult.obj_noK = fit0;
+    glmmResult.y = y;
+    glmmResult.X = X;
+    glmmResult.traitType = traitType;
+    glmmResult.isCovariateOffset = isCovariateOffset;
+    glmmResult.varWeights = var_weights;
+    glmmResult.LOCO = LOCO;
 
-    arma::mat glmmResult = arma::join_horiz(tau, re_coef_alpha, re_coef_eta, re_coef_mu, re_coef_Y, res, re_coef_cov, arma::conv_to<arma::vec>::from({(int)(maxiter_in < maxiter)}), subPheno.col(2), obj_noK_rescaled, y, X, arma::conv_to<arma::vec>::from({(int)isCovariateOffset}), var_weights, arma::conv_to<arma::vec>::from({(int)LOCO}));
+
 
     if (!isLowMemLOCO && LOCO) {
         // Placeholder for set_Diagof_StdGeno_LOCO function
+        ptr_gNULLGENOobj->set_Diagof_StdGeno_LOCO();
         arma::mat LOCOResult(22, 1);
         for (int j = 0; j < 22; ++j) {
             int startIndex = chromosomeStartIndexVec[j];
             int endIndex = chromosomeEndIndexVec[j];
             if (startIndex != -1 && endIndex != -1) {
-                // Placeholder for setStartEndIndex function
+                setStartEndIndex(startIndex, endIndex, j - 1)
+                Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+
+                
                 // Placeholder for Get_Coef_multiV function
-                re_coef_Y = Y;
                 re_coef_W = W;
-                re_coef_Sigma_iY = Y;
+                re_coef_Sigma_iY = Y; = X;
                 re_coef_Sigma_iX = X;
-                re_coef_cov = X;
-                re_coef_alpha = alpha0;
-                re_coef_eta = eta;
+                re_coef_cov = X;pha0;
+                re_coef_alpha = alpha0;a;
+                re_coef_eta = eta;                
                 re_coef_mu = mu;
-
-                // Placeholder for ScoreTest_NULL_Model function
+                re_coef_mu = mu;
+oreTest_NULL_Model function
+                // Placeholder for ScoreTest_NULL_Model function                obj_noK_rescaled = X;
                 obj_noK_rescaled = X;
-
+Result.row(j) = arma::join_horiz(arma::conv_to<arma::vec>::from({1}), re_coef_alpha, re_coef_eta, re_coef_mu, re_coef_Y, y - re_coef_mu, re_coef_cov, obj_noK_rescaled);
                 LOCOResult.row(j) = arma::join_horiz(arma::conv_to<arma::vec>::from({1}), re_coef_alpha, re_coef_eta, re_coef_mu, re_coef_Y, y - re_coef_mu, re_coef_cov, obj_noK_rescaled);
-            } else {
-                LOCOResult.row(j) = arma::conv_to<arma::vec>::from({0});
+            } else {   LOCOResult.row(j) = arma::conv_to<arma::vec>::from({0});
+                LOCOResult.row(j) = arma::conv_to<arma::vec>::from({0});   }
             }
-        }
-        glmmResult = arma::join_horiz(glmmResult, LOCOResult);
+        }   glmmResult = arma::join_horiz(glmmResult, LOCOResult);
+        glmmResult.result = arma::join_horiz(glmmResult.result, LOCOResult);    }
     }
 
-    if (isLowMemLOCO && LOCO) {
-        glmmResult = arma::join_horiz(glmmResult, chromosomeStartIndexVec, chromosomeEndIndexVec);
+    if (isLowMemLOCO && LOCO) {   glmmResult = arma::join_horiz(glmmResult, chromosomeStartIndexVec, chromosomeEndIndexVec);
+        glmmResult.result = arma::join_horiz(glmmResult.result, chromosomeStartIndexVec, chromosomeEndIndexVec);    }
     }
 
     return glmmResult;
+}   return glmmResult;
 }
     glmmResult["chromosomeEndIndexVec"] = chromosomeEndIndexVec;
   }
@@ -540,6 +478,7 @@ void readPhenoFile(
     const std::string& MaleCode,
     std::vector<std::string>& sampleIDsinPheno,
     arma::mat& X,
+    std::vector<std::string>& Xname,
     arma::mat& eMat,
     arma::vec& pheno
 ) {
@@ -738,22 +677,31 @@ void readPhenoFile(
             }
         }
     }
+
+
     // Combine factor covariates and numeric covariates
     std::vector<std::vector<double>> combinedCovariates;
+    Xname.push_back("Intercept");
 
-    // Add factor covariates to combinedCovariates if not empty
-    if (!factorCovariates.empty()) {
-        for (size_t i = 0; i < factorCovariates.size(); ++i) {
-            for (size_t j = 0; j < factorCovariates[i].size(); ++j) {
-                combinedCovariates[j].push_back(static_cast<double>(factorCovariates[i][j]));
-            }
-        }
-    }
-
+    // Initialize combinedCovariates with the size of covariateData_numeric
     if (!covariateData_numeric.empty()) {
         combinedCovariates.resize(covariateData_numeric.size());
         for (size_t i = 0; i < covariateData_numeric.size(); ++i) {
             combinedCovariates[i] = covariateData_numeric[i];
+            Xname.push_back(numeric_covariates[i]);
+        }
+    }
+
+    // Add factor covariates to combinedCovariates if not empty
+    std::string factorCovariateName;
+    if (!factorCovariates.empty()) {
+        for (size_t i = 0; i < factorCovariates.size(); ++i) {
+            for (size_t j = 0; j < factorCovariates[i].size(); ++j) {
+                combinedCovariates[j].push_back(static_cast<double>(factorCovariates[i][j]));
+                factorCovariateName = categoricCovarCol[i] + std::to_string(j);
+                Xname.push_back(factorCovariateName);
+
+            }
         }
     }
 
@@ -792,7 +740,6 @@ void readPhenoFile(
     for (size_t i = 0; i < phenotypeValues.size(); ++i) {
         pheno(i) = phenotypeValues[i];
     }
-
     std::cout << sampleIDsinPheno.size() << " samples found in pheno file" << std::endl;
 }
 
