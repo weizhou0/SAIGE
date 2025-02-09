@@ -771,24 +771,4 @@ void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<st
 }
 
 
-class GLMMResults {
-public:
-    arma::vec theta;
-    arma::vec coefficients;
-    arma::vec linear_predictors;
-    arma::vec fitted_values;
-    arma::vec Y;
-    arma::vec residuals;
-    arma::mat cov;
-    bool converged;
-    std::vector<std::string> sampleID;
-    GLMResults obj_noK;
-    arma::vec y;
-    arma::mat X;
-    std::string traitType;
-    bool isCovariateOffset;
-    arma::vec varWeights;
-    bool LOCO;
-    std::vector<GLMMResults> LOCOResult; // List of 22 GLMMResults objects
-};
 
