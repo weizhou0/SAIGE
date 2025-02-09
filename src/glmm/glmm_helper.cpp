@@ -986,21 +986,14 @@ arma::colvec getCrossprod(
     arma::vec& wVec,
     arma::vec& tauVec,
     bool LOCO,
+    unsigned int omp_num_threads, 
     const arma::ivec& Ivec_start_indices,
-
     const bool isGRM,
     const bool isspGRM,
     const arma::sp_mat& spGRM,
-    
     const arma::mat& eMat,
-    const arma::vec& EEt_eigenvalVec,
-    const arma::vec& REEt_diagVec,
-    const arma::mat& EEt_eigenvecMat,
     const arma::mat& EEt_sqrtEigenMat, 
-    const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
-    unsigned int omp_num_threads
-
-
+    const NullGENO::NullGenoClass* ptr_gNULLGENOobj
 ) {
     arma::colvec crossProdVec;
     arma::vec crossProd1, GRM_I_bvec, Ibvec, V_I_bvec, V_T_bvec;
@@ -1027,19 +1020,21 @@ arma::colvec getCrossprod(
         }
     }
 
+
     tau_ind = tau_ind + 1;
 if(eMat.n_rows > 0){
     if (Ivec_start_indices.n_rows == 0) {
         if (isGRM) {
-            crossProd1 = getCrossprodMatAndKin_eMat(bVec, LOCO);
+            crossProd1 = getCrossprodMatAndKin_eMat(bVec, LOCO, EEt_sqrtEigenMat, isspGRM, spGRM, ptr_gNULLGENOobj);
         } else {
-            crossProd1 = getCrossprodMatAndI_eMat(bVec, LOCO);
+            crossProd1 = getCrossprodMatAndI_eMat(bVec, LOCO, EEt_sqrtEigenMat);
         }
     } else {
         if (isGRM) {
-            crossProd1 = getCrossprodMatAndKin_eMat_Imat(bVec, LOCO);
+            crossProd1 = getCrossprodMatAndKin_eMat_Imat(bVec,  LOCO, EEt_sqrtEigenMat, omp_num_threads, Ivec_start_indices, isspGRM, spGRM, ptr_gNULLGENOobj);
+           
         } else {
-            crossProd1 = getCrossprodMatAndI_eMat_Imat(bVec, LOCO);
+            crossProd1 = getCrossprodMatAndI_eMat_Imat(bVec, LOCO, EEt_sqrtEigenMat, omp_num_threads, Ivec_start_indices);
         }
     }
     crossProdVec = crossProdVec + tauVec(tau_ind) * crossProd1;
@@ -1319,13 +1314,13 @@ arma::vec getCrossprodMatAndI_eMat_Imat(arma::colvec& bVec, bool LOCO, const arm
     return crossProdVec;
 }
 
-arma::vec getCrossprodMatAndKin_eMat_Imat(arma::colvec& bVec, bool LOCO, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices){
+arma::vec getCrossprodMatAndKin_eMat_Imat(arma::colvec& bVec, bool LOCO, const arma::mat& EEt_sqrtEigenMat, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices, const bool isspGRM, const arma::sp_mat& spGRM,  const NullGENO::NullGenoClass* ptr_gNULLGENOobj){
     arma::colvec bVec_1, crossProdVecGRM_1, IbVec, GRM_I_bvec, crossProdVecGRM, crossProdVec;
     crossProdVec.zeros(bVec.n_elem);
     for(unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++){
             bVec_1 = EEt_sqrtEigenMat.col(i) % bVec;
             IbVec = getprodImat_t_bVec(bVec_1,omp_num_threads, Ivec_start_indices);
-            GRM_I_bvec = getCrossprodMatAndKin(IbVec, LOCO);
+            GRM_I_bvec = getCrossprodMatAndKin(IbVec, LOCO, , isspGRM, spGRM, ptr_gNULLGENOobj);
             crossProdVecGRM = getprodImatbVec(GRM_I_bvec, omp_num_threads, Ivec_start_indices);
 
             crossProdVecGRM_1 = EEt_sqrtEigenMat.col(i) % crossProdVecGRM;
