@@ -159,8 +159,7 @@ void getAIScore(const arma::vec& Yvec, const arma::mat& Xmat, const arma::vec& w
                 }
             }     
     }
-
-    Trace = GetTrace_multiV_eMat(Sigma_iX, Xmat, wVec, tauVec, fixtauVec, cov, nrun, maxiterPCG, tolPCG, traceCVcutoff, LOCO);
+    GetTrace(Sigma_iX, Xmat, wVec, tauVec, fixtauVec, cov, nrun, maxiterPCG, tolPCG, traceCVcutoff, LOCO, Trace, Ivec_start_indices);
 }
 
 
@@ -347,3 +346,81 @@ arma::vec getprodImatImattbVec(arma::vec & bVec){
   }
   return(resultVec);
 }
+
+
+
+
+void getCoefficients_multiV(const arma::vec& Yvec, const arma::mat& Xmat, const arma::vec& wVec, const arma::vec& tauVec, int maxiterPCG, double tolPCG, bool LOCO, arma::vec& Sigma_iY, arma::mat& Sigma_iX, arma::mat& cov, arma::vec& alpha, arma::vec& eta) {
+    int Nnomissing = wVec.n_elem;
+    std::cout << "before Sigma_iY" << std::endl;
+    std::cout << "Yvec.n_elem " << Yvec.n_elem << std::endl;
+    Sigma_iY = getPCG1ofSigmaAndVector_multiV(wVec, tauVec, Yvec, maxiterPCG, tolPCG, LOCO);
+    std::cout << "after Sigma_iY" << std::endl;
+    int colNumX = Xmat.n_cols;
+    Sigma_iX.set_size(Nnomissing, colNumX);
+    arma::vec XmatVecTemp;
+    for (int i = 0; i < colNumX; i++) {
+        XmatVecTemp = Xmat.col(i);
+        Sigma_iX.col(i) = getPCG1ofSigmaAndVector_multiV(wVec, tauVec, XmatVecTemp, maxiterPCG, tolPCG, LOCO);
+    }
+    arma::mat Xmatt = Xmat.t();
+    try {
+        cov = arma::inv_sympd(arma::symmatu(Xmatt * Sigma_iX));
+    } catch (const std::exception& e) {
+        cov = arma::pinv(arma::symmatu(Xmatt * Sigma_iX));
+        std::cout << "inv_sympd failed, inverted with pinv" << std::endl;
+    }
+    cov.print("cov");
+    arma::mat Sigma_iXt = Sigma_iX.t();
+    arma::vec SigmaiXtY = Sigma_iXt * Yvec;
+    alpha = cov * SigmaiXtY;
+    eta = Yvec - tauVec(0) * (Sigma_iY - Sigma_iX * alpha) / wVec;
+}
+
+
+
+
+void Get_Coef_multiV(const arma::vec& y, const arma::mat& X, const arma::vec& tau, const arma::vec& offset, const arma::vec& var_weights, 
+                    GLMResults* fit0ptr, arma::vec& alpha, arma::vec& eta, arma::vec& Sigma_iY, arma::mat& Sigma_iX, arma::mat& cov, 
+                     arma::vec& Y, int maxiterPCG, double tolPCG, int maxiter, bool verbose, bool LOCO) {
+    double tol_coef = 0.1;
+    arma::vec mu = fit0ptr->linkinv(eta); 
+    arma::vec mu_eta = fit0ptr->mu_eta(eta);
+    Y = eta - offset + (y - mu) / mu_eta;
+
+    if (var_weights.is_empty()) {
+        var_weights = arma::ones(y.n_elem);
+    } 
+    arma::vec sqrtW = mu_eta / arma::sqrt(1 / var_weights % fit0ptr->variance(mu));
+    arma::vec W = arma::square(sqrtW);
+
+    for (int i = 0; i < maxiter; ++i) {
+        // Assuming getCoefficients_multiV is a function that returns a struct with alpha, eta, cov, Sigma_iY, Sigma_iX
+        getCoefficients_multiV(Y, X, W, tau, maxiterPCG, tolPCG, LOCO, Sigma_iY, Sigma_iX, cov, alpha, eta);
+        eta = eta + offset;
+
+     
+        std::cout << "Tau:" << std::endl;
+        tau.print();
+        std::cout << "Fixed-effect coefficients:" << std::endl;
+        alpha.print();
+
+
+        mu = fit0ptr->linkinv(eta); // Assuming fit0ptr is the family$linkinv(eta)
+        mu_eta = fit0ptr->mu_eta(eta); // Assuming fit0ptr is the family$mu.eta(eta)
+
+        Y = eta - offset + (y - mu) / mu_eta;
+
+        sqrtW = mu_eta / arma::sqrt(1 / var_weights % fit0ptr->variance(mu));
+        W = arma::square(sqrtW);
+
+        if (arma::max(arma::abs(alpha - alpha0) / (arma::abs(alpha) + arma::abs(alpha0) + tol_coef)) < tol_coef) {
+            break;
+        }
+        alpha0 = alpha;
+    }
+
+    std::cout << "alpha" << std::endl;
+    alpha.print();
+}
+   
