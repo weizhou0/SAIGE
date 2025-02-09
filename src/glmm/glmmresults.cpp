@@ -64,6 +64,7 @@ class GLMMResult {
         boost::archive::text_oarchive oa(ofs);
         oa << result;
     }
+
     //Deserialize the object from a file:
     GLMMResult loadGLMMResult(const std::string& filename) {
         GLMMResult result;
@@ -73,6 +74,7 @@ class GLMMResult {
         return result;
     }
 
+    /*
     int main() {
         // Create an example GLMMResult object
         GLMMResult result;
@@ -106,3 +108,4 @@ class GLMMResult {
     
         return 0;
     }
+        */

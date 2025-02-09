@@ -785,64 +785,91 @@ void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<st
 
 
 
-arma::vec getPCG1ofSigmaAndVector(arma::vec& wVec,  arma::vec& tauVec, arma::vec& bVec, int maxiterPCG, double tolPCG, bool LOCO, const arma::sp_mat & spSigma, const arma::ivec& Ivec_start_indices, const arma::mat& eMat){
-    int Nnomissing = wVec.n_elem;
-    arma::vec xVec(Nnomissing);
-    xVec.zeros();
-    std::cout << "g_isStoreSigma " << g_isStoreSigma << std::endl;
-    if(spSigma.n_rows > 0){
-        xVec = arma::spsolve(spSigma, bVec);
-    }else{
-        arma::vec rVec = bVec;
-        arma::vec r1Vec;
-        arma::vec crossProdVec(Nnomissing);
-        arma::vec zVec(Nnomissing);
-        arma::vec minvVec(Nnomissing);
-        if(eMat.n_rows > 0){
-                minvVec = 1/getDiagOfSigma_multiV_eMat(wVec, tauVec, LOCO);
+  
+    arma::vec getPCG1ofSigmaAndVector(
+        arma::vec& wVec,  
+        arma::vec& tauVec, 
+        arma::vec& bVec, 
+        int maxiterPCG, 
+        double tolPCG, 
+        bool LOCO, 
+        const arma::sp_mat & spSigma, 
+        const bool isGRM,
+        const bool isspGRM,
+        const arma::sp_mat& spGRM,
+        const arma::ivec& Ivec_start_indices,
+        const arma::mat& eMat,
+        const arma::vec& EEt_eigenvalVec,
+        const arma::vec& REEt_diagVec,
+        const arma::mat& EEt_eigenvecMat,
+        const NullGENO::NullGenoClass* ptr_gNULLGENOobj
+    ) {
+        int Nnomissing = wVec.n_elem;
+        arma::vec xVec(Nnomissing);
+        xVec.zeros();
+        std::cout << "g_isStoreSigma " << g_isStoreSigma << std::endl;
+        if(spSigma.n_rows > 0){
+            xVec = arma::spsolve(spSigma, bVec);
         }else{
-                minvVec = 1/getDiagOfSigma_multiV(wVec, tauVec, LOCO);
+            arma::vec rVec = bVec;
+            arma::vec r1Vec;
+            arma::vec crossProdVec(Nnomissing);
+            arma::vec zVec(Nnomissing);
+            arma::vec minvVec(Nnomissing);
+            minvVec = 1/getDiagOfSigma(wVec, tauVec, LOCO, isGRM, isspGRM, spSigma, Ivec_start_indices, eMat, EEt_eigenvalVec, REEt_diagVec, EEt_eigenvecMat, ptr_gNULLGENOobj);
+
+            zVec = minvVec % rVec;
+
+            double sumr2 = sum(rVec % rVec);
+            arma::vec z1Vec(Nnomissing);
+            arma::vec pVec = zVec;
+
+            int iter = 0;
+            arma::colvec ApVec;
+            while (sumr2 > tolPCG && iter < maxiterPCG) {
+                    iter = iter + 1;
+                    if(eMat.n_rows > 0){
+                            ApVec = getCrossprod_multiV_eMat(pVec, wVec, tauVec, LOCO);
+                    }else{
+                            ApVec = getCrossprod_multiV(pVec, wVec, tauVec, LOCO);
+                    }
+                    arma::vec preA = (rVec.t() * zVec)/(pVec.t() * ApVec);
+                    double a = preA(0);
+                    xVec = xVec + a * pVec;
+                    r1Vec = rVec - a * ApVec;
+                    z1Vec = minvVec % r1Vec;
+
+                    arma::vec Prebet = (z1Vec.t() * r1Vec)/(zVec.t() * rVec);
+                    double bet = Prebet(0);
+                    pVec = z1Vec + bet * pVec;
+                    zVec = z1Vec;
+                    rVec = r1Vec;
+                    sumr2 = sum(rVec % rVec);
+            }
+
+            if (iter >= maxiterPCG){
+                    cout << "pcg did not converge. You may increase maxiter number." << endl;
+            }
+            cout << "iter from getPCG1ofSigmaAndVector " << iter << endl;
         }
-
-        zVec = minvVec % rVec;
-
-        double sumr2 = sum(rVec % rVec);
-        arma::vec z1Vec(Nnomissing);
-        arma::vec pVec = zVec;
-
-        int iter = 0;
-        arma::colvec ApVec;
-        while (sumr2 > tolPCG && iter < maxiterPCG) {
-                iter = iter + 1;
-                if(g_EMat.n_rows > 0){
-                        ApVec = getCrossprod_multiV_eMat(pVec, wVec, tauVec, LOCO);
-                }else{
-                        ApVec = getCrossprod_multiV(pVec, wVec, tauVec, LOCO);
-                }
-                arma::vec preA = (rVec.t() * zVec)/(pVec.t() * ApVec);
-                double a = preA(0);
-                xVec = xVec + a * pVec;
-                r1Vec = rVec - a * ApVec;
-                z1Vec = minvVec % r1Vec;
-
-                arma::vec Prebet = (z1Vec.t() * r1Vec)/(zVec.t() * rVec);
-                double bet = Prebet(0);
-                pVec = z1Vec + bet * pVec;
-                zVec = z1Vec;
-                rVec = r1Vec;
-                sumr2 = sum(rVec % rVec);
-        }
-
-        if (iter >= maxiterPCG){
-                cout << "pcg did not converge. You may increase maxiter number." << endl;
-        }
-        cout << "iter from getPCG1ofSigmaAndVector " << iter << endl;
+        return xVec;
     }
-    return xVec;
-}
 
 
-arma::vec getDiagOfSigma(arma::vec& wVec, arma::vec& tauVec, bool LOCO, const bool isGRM, const bool isspGRM, const sp_mat & spGRM, const arma::ivec& Ivec_start_indices, const arma::mat& eMat, const arma::vec & EEt_eigenvalVec, const arma::vec & REEt_diagVec, const arma::mat & EEt_eigenvecMat, const NullGENO::NullGenoClass* ptr_gNULLGENOobj) {
+arma::vec getDiagOfSigma(
+    arma::vec& wVec,
+    arma::vec& tauVec,
+    bool LOCO,
+    const bool isGRM,
+    const bool isspGRM,
+    const arma::sp_mat& spGRM,
+    const arma::ivec& Ivec_start_indices,
+    const arma::mat& eMat,
+    const arma::vec& EEt_eigenvalVec,
+    const arma::vec& REEt_diagVec,
+    const arma::mat& EEt_eigenvecMat,
+    const NullGENO::NullGenoClass* ptr_gNULLGENOobj
+) {
     int Nnomissing = wVec.n_elem;
     arma::vec diagVec(Nnomissing);
     arma::vec diagVec0(Nnomissing);
@@ -953,3 +980,372 @@ arma::vec getDiagOfSigma(arma::vec& wVec, arma::vec& tauVec, bool LOCO, const bo
 
     return diagVec;
 }
+
+arma::colvec getCrossprod(
+    arma::colvec& bVec,
+    arma::vec& wVec,
+    arma::vec& tauVec,
+    bool LOCO,
+    const arma::ivec& Ivec_start_indices,
+
+    const bool isGRM,
+    const bool isspGRM,
+    const arma::sp_mat& spGRM,
+    
+    const arma::mat& eMat,
+    const arma::vec& EEt_eigenvalVec,
+    const arma::vec& REEt_diagVec,
+    const arma::mat& EEt_eigenvecMat,
+    const arma::mat& EEt_sqrtEigenMat, 
+    const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
+    unsigned int omp_num_threads
+
+
+) {
+    arma::colvec crossProdVec;
+    arma::vec crossProd1, GRM_I_bvec, Ibvec, V_I_bvec, V_T_bvec;
+
+    unsigned int tau_ind = 0;
+    crossProdVec = tauVec(0) * (bVec % (1 / wVec));
+    tau_ind = tau_ind + 1;
+
+
+    if (Ivec_start_indices.n_rows == 0) { // it must have specified GRM
+        if (isGRM) {
+            crossProd1 = getCrossprodMatAndKin(bVec, LOCO, isspGRM, spGRM, ptr_gNULLGENOobj);
+            crossProdVec = crossProdVec + tauVec(1) * crossProd1;
+        }
+    } else {
+        if (isGRM) {
+            Ibvec = g_I_longl_mat_t * bVec; //need to update
+            GRM_I_bvec = getCrossprodMatAndKin(Ibvec, LOCO, isspGRM, spGRM, ptr_gNULLGENOobj);
+            crossProd1 = g_I_longl_mat * GRM_I_bvec;
+            crossProdVec = crossProdVec + tauVec(1) * crossProd1;
+        } else {
+            crossProd1 = getprodImatImattbVec(bVec, omp_num_threads, Ivec_start_indices);
+            crossProdVec = crossProdVec + tauVec(1) * crossProd1;
+        }
+    }
+
+    tau_ind = tau_ind + 1;
+if(eMat.n_rows > 0){
+    if (Ivec_start_indices.n_rows == 0) {
+        if (isGRM) {
+            crossProd1 = getCrossprodMatAndKin_eMat(bVec, LOCO);
+        } else {
+            crossProd1 = getCrossprodMatAndI_eMat(bVec, LOCO);
+        }
+    } else {
+        if (isGRM) {
+            crossProd1 = getCrossprodMatAndKin_eMat_Imat(bVec, LOCO);
+        } else {
+            crossProd1 = getCrossprodMatAndI_eMat_Imat(bVec, LOCO);
+        }
+    }
+    crossProdVec = crossProdVec + tauVec(tau_ind) * crossProd1;
+    tau_ind = tau_ind + 1;
+}
+    return crossProdVec;
+}
+
+arma::vec getCrossprodMatAndKin(arma::colvec& bVec, bool LOCO,  const bool isspGRM, const arma::sp_mat& spGRM,  const NullGENO::NullGenoClass* ptr_gNULLGENOobj){
+    arma::vec crossProdVec;
+    if(isspGRM){
+        crossProdVec = spGRM * bVec;
+    }else{
+        if(!LOCO){
+          crossProdVec = parallelCrossProd(bVec, ptr_gNULLGENOobj);
+        }else{
+          crossProdVec = parallelCrossProd_LOCO(bVec, ptr_gNULLGENOobj);
+        }
+    }
+    return(crossProdVec);
+}
+
+arma::vec parallelCrossProd(arma::colvec & bVec, const NullGENO::NullGenoClass* ptr_gNULLGENOobj) {
+          int Msub_mafge1perc = ptr_gNULLGENOobj->getnumberofMarkerswithMAFge_minMAFtoConstructGRM();
+          CorssProd CorssProd(bVec);
+  
+          parallelReduce(0, Msub_mafge1perc, CorssProd);
+
+          return CorssProd.m_bout/(CorssProd.Msub_mafge1perc);
+  }
+
+arma::vec parallelCrossProd_LOCO(arma::colvec & bVec, const NullGENO::NullGenoClass* ptr_gNULLGENOobj) {
+
+    int numberMarker_full = 0;
+    arma::vec outvec = parallelCrossProd_full(bVec, numberMarker_full);
+
+    CorssProd CorssProd(bVec);
+    int startIndex = ptr_gNULLGENOobj->getStartIndex();
+    int endIndex = ptr_gNULLGENOobj->getEndIndex();
+
+    parallelReduce(startIndex, endIndex + 1, CorssProd);
+
+    outvec = outvec - CorssProd.m_bout;
+
+    int markerNum = numberMarker_full - CorssProd.Msub_mafge1perc;
+    return outvec / markerNum;
+}
+
+struct CorssProd_usingSubMarker : public Worker
+{
+    // source vectors
+    arma::colvec & m_bVec;
+    unsigned int m_N;
+    unsigned int m_M_Submarker;
+    unsigned int m_M;
+    arma::ivec subMarkerIndex ;
+
+    // product that I have accumulated
+    arma::vec m_bout;
+
+
+    // constructors
+    CorssProd_usingSubMarker(arma::colvec & y)
+        : m_bVec(y) {
+
+        //m_Msub = ptr_gNULLGENOobj->getMsub();
+        subMarkerIndex = getSubMarkerIndex();
+        m_M_Submarker = subMarkerIndex.n_elem;
+        m_N = ptr_gNULLGENOobj->getNnomissing();
+        m_bout.zeros(m_N);
+    }
+    CorssProd_usingSubMarker(const CorssProd_usingSubMarker& CorssProd_usingSubMarker, Split)
+        : m_bVec(CorssProd_usingSubMarker.m_bVec)
+    {
+
+        m_N = CorssProd_usingSubMarker.m_N;
+        //m_M = CorssProd_usingSubMarker.m_M;
+        m_M_Submarker = CorssProd_usingSubMarker.m_M_Submarker;
+        subMarkerIndex = CorssProd_usingSubMarker.subMarkerIndex;
+        m_bout.zeros(m_N);
+
+    }
+
+       // process just the elements of the range I've been asked to
+    void operator()(std::size_t begin, std::size_t end) {
+        arma::vec vec;
+        double val1;
+        int j;
+        for(unsigned int i = begin; i < end; i++){
+            j = subMarkerIndex[i];
+//                      std::cout << "j: " << j << std::endl;
+            ptr_gNULLGENOobj->Get_OneSNP_StdGeno(j, &vec);
+            val1 = dot(vec,  m_bVec);
+            m_bout += val1 * (vec);
+        }
+    }
+
+    // join my value with that of another InnerProduct
+    void join(const  CorssProd_usingSubMarker & rhs) {
+    m_bout += rhs.m_bout;
+    }
+};
+
+struct CorssProd : public Worker
+{
+    // source vectors
+    arma::colvec & m_bVec;
+    unsigned int m_N;
+    unsigned int m_M;
+
+    // product that I have accumulated
+    arma::vec m_bout;
+    int Msub_mafge1perc;
+
+    // constructors
+    CorssProd(arma::colvec & y)
+        : m_bVec(y) {
+
+        m_M = ptr_gNULLGENOobj->getM();
+        m_N = ptr_gNULLGENOobj->getNnomissing();
+        m_bout.zeros(m_N);
+        Msub_mafge1perc=0;
+        //ptr_gNULLGENOobj->getnumberofMarkerswithMAFge_minMAFtoConstructGRM();
+    }
+    CorssProd(const CorssProd& CorssProd, Split)
+        : m_bVec(CorssProd.m_bVec)
+    {
+
+        m_N = CorssProd.m_N;
+        m_M = CorssProd.m_M;
+        m_bout.zeros(m_N);
+        Msub_mafge1perc=0;
+        //CorssProd.Msub_mafge1perc;
+
+    }
+    // process just the elements of the range I've been asked to
+    void operator()(std::size_t begin, std::size_t end) {
+        arma::vec vec;
+        for(unsigned int i = begin; i < end; i++){
+            //if(ptr_gNULLGENOobj->alleleFreqVec[i] >= minMAFtoConstructGRM && ptr_gNULLGENOobj->alleleFreqVec[i] <= 1-minMAFtoConstructGRM){
+                ptr_gNULLGENOobj->Get_OneSNP_StdGeno(i, &vec);
+                double val1 = dot(vec,  m_bVec);
+                m_bout += val1 * (vec) ;
+                Msub_mafge1perc += 1;
+
+        }
+    }
+
+    // join my value with that of another InnerProduct
+    void join(const CorssProd & rhs) {
+        m_bout += rhs.m_bout;
+        Msub_mafge1perc += rhs.Msub_mafge1perc;
+    }
+};
+
+arma::vec getprodImatImattbVec(arma::vec & bVec, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices){
+    omp_set_num_threads(omp_num_threads);
+    auto n = Ivec_start_indices.n_elem - 1;
+    arma::vec resultVec(bVec.n_elem, arma::fill::zeros);
+    #pragma omp parallel
+    {
+            auto thread_idx = omp_get_thread_num();
+            for(int j = thread_idx; j < n; j += g_omp_num_threads) {
+                    double sum = 0;
+                    size_t start = Ivec_start_indices[j];
+                    size_t end = Ivec_start_indices[j + 1];
+                    for(size_t k = start; k < end; k++) {
+                            sum += bVec[k];
+                    }
+                    for(size_t k = start; k < end; k++) {
+                            resultVec[k] += sum;
+                    }
+            }
+    }
+    return(resultVec);
+}
+
+arma::vec getprodImatbVec(arma::vec & bVec, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices){
+    omp_set_num_threads(omp_num_threads);
+    int N = Ivec_start_indices[Ivec_start_indices.n_elem]; // -1?
+    auto n = Ivec_start_indices.n_elem - 1;
+
+    arma::vec resultVec(N, arma::fill::zeros);
+    #pragma omp parallel
+    {
+            auto thread_idx = omp_get_thread_num();
+            for(int j = thread_idx; j < n; j += g_omp_num_threads) {
+                    double sum = 0;
+                    size_t start = Ivec_start_indices[j];
+                    size_t end = Ivec_start_indices[j + 1];
+                    
+                    for(size_t k = start; k < end; k++) {
+                        resultVec[k] = bVec[j];
+                    }
+
+            }
+    }
+    return(resultVec);
+}
+
+arma::vec getprodImat_t_bVec(arma::vec & bVec, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices){
+    omp_set_num_threads(omp_num_threads);
+    auto n = Ivec_start_indices.n_elem - 1;
+    arma::vec resultVec(n, arma::fill::zeros);
+    #pragma omp parallel
+    {
+            auto thread_idx = omp_get_thread_num();
+            for(int j = thread_idx; j < n; j += g_omp_num_threads) {
+                    double sum = 0;
+                    size_t start = Ivec_start_indices[j];
+                    size_t end = Ivec_start_indices[j + 1];
+                    for(size_t k = start; k < end; k++) {
+                        resultVec[j] += bVec[k];
+                    }
+                    //for(size_t k = start; k < end; k++) {
+                    //        resultVec[k] = sum;
+                    //}
+            }
+    }
+    return(resultVec);
+}
+
+
+
+
+arma::vec getCrossprodMatAndKin_eMat(arma::colvec& bVec, bool LOCO,  const arma::mat& EEt_sqrtEigenMat, const bool isspGRM, const arma::sp_mat& spGRM,  const NullGENO::NullGenoClass* ptr_gNULLGENOobj){
+    arma::colvec bVec_1, crossProdVecGRM_1, crossProdVecGRM, crossProdVec;
+    crossProdVec.zeros(bVec.n_elem);
+    for(unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++){
+            bVec_1 = EEt_sqrtEigenMat.col(i) % bVec;
+            crossProdVecGRM = getCrossprodMatAndKin(bVec_1, LOCO, isspGRM, spGRM, ptr_gNULLGENOobj);
+            crossProdVecGRM_1 = EEt_sqrtEigenMat.col(i) % crossProdVecGRM;
+            crossProdVec = crossProdVec + crossProdVecGRM_1;
+            crossProdVecGRM.zeros();
+            crossProdVecGRM_1.zeros();
+    }
+    return(crossProdVec);
+}
+
+arma::vec getCrossprodMatAndI_eMat(arma::colvec& bVec, bool LOCO, const arma::mat& EEt_sqrtEigenMat){
+    arma::colvec bVec_1, crossProdVecGRM_1, crossProdVecGRM, crossProdVec;
+    crossProdVec.zeros(bVec.n_elem);
+    for(unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++){
+            arma::colvec sqrtEigenVec = EEt_sqrtEigenMat.col(i);
+            bVec_1 = sqrtEigenVec % bVec;
+            crossProdVecGRM = bVec_1;
+            crossProdVecGRM_1 = sqrtEigenVec % crossProdVecGRM;
+            crossProdVec = crossProdVec + crossProdVecGRM_1;
+    }
+    return(crossProdVec);
+}
+
+
+arma::vec getCrossprodMatAndI_eMat_Imat(arma::colvec& bVec, bool LOCO, const arma::mat& EEt_sqrtEigenMat, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices) {
+    arma::colvec crossProdVec(bVec.n_elem, arma::fill::zeros);
+    omp_set_num_threads(omp_num_threads);
+
+    auto n = Ivec_start_indices.n_elem - 1;
+#pragma omp parallel
+{
+    auto thread_idx = omp_get_thread_num();
+    auto g_omp_num_threads = omp_get_num_threads();
+    for(unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++) {
+        for(int j = thread_idx; j < n; j += g_omp_num_threads) {
+            double sum = 0;
+            size_t start = g_I_start_indices[j];
+            size_t end = g_I_start_indices[j + 1];
+            for(size_t k = start; k < end; k++) {
+                sum += EEt_sqrtEigenMat.at(k, i) * bVec[k];
+            }
+            for(size_t k = start; k < end; k++) {
+                crossProdVec[k] += EEt_sqrtEigenMat.at(k, i) * sum;
+            }
+        }
+    }
+}
+    return crossProdVec;
+}
+
+arma::vec getCrossprodMatAndKin_eMat_Imat(arma::colvec& bVec, bool LOCO, unsigned int omp_num_threads, const arma::ivec& Ivec_start_indices){
+    arma::colvec bVec_1, crossProdVecGRM_1, IbVec, GRM_I_bvec, crossProdVecGRM, crossProdVec;
+    crossProdVec.zeros(bVec.n_elem);
+    for(unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++){
+            bVec_1 = EEt_sqrtEigenMat.col(i) % bVec;
+            IbVec = getprodImat_t_bVec(bVec_1,omp_num_threads, Ivec_start_indices);
+            GRM_I_bvec = getCrossprodMatAndKin(IbVec, LOCO);
+            crossProdVecGRM = getprodImatbVec(GRM_I_bvec, omp_num_threads, Ivec_start_indices);
+
+            crossProdVecGRM_1 = EEt_sqrtEigenMat.col(i) % crossProdVecGRM;
+            crossProdVec = crossProdVec + crossProdVecGRM_1;
+            crossProdVecGRM.zeros();
+            crossProdVecGRM_1.zeros();
+    }
+    return(crossProdVec);
+}
+
+
+
+const arma::ivec& Ivec_start_indices,
+
+const bool isGRM,
+const bool isspGRM,
+const arma::sp_mat& spGRM,
+
+const arma::mat& eMat,
+const arma::vec& EEt_eigenvalVec,
+const arma::vec& REEt_diagVec,
+const arma::mat& EEt_eigenvecMat,
+const NullGENO::NullGenoClass* ptr_gNULLGENOobj

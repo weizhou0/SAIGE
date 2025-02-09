@@ -131,15 +131,77 @@ void fitNULLGLMM(const Parameters& params) {
         }
     }
     arma::uvec Ivec_start_indices;
+    arma::vec REEt_diagVec, EEt_sqrtEigenMat, EEt_eigenvalVec. EEt_diagVec;
+    arma::mat EEt_eigenvecMat;
+    if(eMat.n_rows != 0){
+        arma::mat U;
+        arma::vec S;
+        arma::mat V;
+        arma::svd_econ(U, S, V, eMat, "left");
+
+        EEt_eigenvalVec = arma::square(S);
+        EEt_eigenvalVec.print("EEt_eigenvalVec");
+        EEt_eigenvecMat = U;
+        EEt_diagVec.set_size(eMat.n_rows);
+        EEt_diagVec = arma::sum(arma::square(eMat), 1);
+        EEt_sqrtEigenMat.set_size(arma::size(EEt_eigenvecMat));
+        for(unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++){
+                arma::fcolvec sqrtEigenVec = std::sqrt(EEt_eigenvalVec(i)) * (EEt_eigenvalVec.col(i));
+                EEt_sqrtEigenMat.col(i) = sqrtEigenVec;
+        }
+
+        REEt_diagVec.set_size(eMat.n_rows);
+        REEt_diagVec.zeros();
+        for(unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++){
+                 arma::vec eigenvec = EEt_eigenvecMat.col(i);
+                 double eigenval = g_EEt_eigenvalVec(i);
+                 REEt_diagVec = REEt_diagVec + eigenval*arma::square(eigenvec);
+        }
+
+    }
     if (hasDuplicates) {
         std::cout << "Duplicated IDs were found " << std::endl;
         std::cout << overlappedSamples.size() << " observations will be used for analysis" << std::endl;
         set_Ivec_start_indices(sampleIDsinPhenonew, Ivec_start_indices);
-
     }
 
 
-    GLMMResults modglmm = glmmkin_ai_PCG_Rcpp_multiV(ptr_gNULLGENOobj, X, pheno, traitType, offset, var_weights, sampleIDsinPhenonew, isCovariateOffset, tau, fixtau, params.maxiter, params.tol, params.verbose, params.nrun, params.tolPCG, params.maxiterPCG, result.subPheno, result.indicatorGenoSamplesWithPheno, result.out_transform, result.tauInit, params.memoryChunk, params.LOCO, result.chromosomeStartIndexVec, result.chromosomeEndIndexVec, params.traceCVcutoff, result.isCovariateTransform, result.isDiagofKinSetAsOne, params.isLowMemLOCO, result.covarianceIdxMat, params.isStoreSigma, params.useSparseGRMtoFitNULL, params.useGRMtoFitNULL, params.isSparseGRMIdentity);
+    GLMMResults modglmm = glmmkin_ai_PCG_Rcpp_multiV(
+        ptr_gNULLGENOobj,
+        X,
+        pheno,
+        traitType,
+        offset,
+        var_weights,
+        sampleIDsinPhenonew,
+        isCovariateOffset,
+        tau,
+        fixtau,
+        params.maxiter,
+        params.tol,
+        params.verbose,
+        params.nrun,
+        params.tolPCG,
+        params.maxiterPCG,
+        result.subPheno,
+        result.indicatorGenoSamplesWithPheno,
+        result.out_transform,
+        result.tauInit,
+        params.memoryChunk,
+        params.LOCO,
+        result.chromosomeStartIndexVec,
+        result.chromosomeEndIndexVec,
+        params.traceCVcutoff,
+        result.isCovariateTransform,
+        result.isDiagofKinSetAsOne,
+        params.isLowMemLOCO,
+        result.covarianceIdxMat,
+        params.isStoreSigma,
+        params.useSparseGRMtoFitNULL,
+        params.useGRMtoFitNULL,
+        params.isSparseGRMIdentity,
+        arma::vec & REEt_diagVec
+    );
 
 }
 
@@ -182,7 +244,6 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
 ) {
 
     GLMMResults glmmResult;
-
     int n = y.n_elem;
     if (offset.is_empty()) {
         offset = arma::zeros(n);
