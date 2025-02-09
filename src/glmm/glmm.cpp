@@ -332,12 +332,12 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
     }
     arma::mat cov;
     const GLMResults* fit0ptr = &fit0; 
-    Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+    Get_Coef(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
 
     arma::mat AI;
     arma::vec YPAPY, Trace, PY;
 
-    getAIScore(Y, X, W, tau, fixtau, Sigma_iY, Sigma_iX, cov, AI, YPAPY, Trace, PY, k1, nrun, maxiterPCG, tolPCG, traceCVcutoff, LOCO, Ivec_start_indices, Tvec_start_indices, eMat);
+    getAIScore(Y, X, W, tau, fixtau, Sigma_iY, Sigma_iX, cov, AI, YPAPY, Trace, PY, k1, nrun, maxiterPCG, tolPCG, traceCVcutoff, LOCO, Ivec_start_indices, eMat);
 
     arma::vec tau0 = tau;
     arma::vec tau0_q2 = tau(arma::find(fixtau == 0));
@@ -358,7 +358,7 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
         tau0 = tau;
         eta0 = eta;
 
-        Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+        Get_Coef(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
 
         fitglmmaiRPCG_multiV_updateTau(Y, X, W, tau, fixtau, Sigma_iY, Sigma_iX, cov, alpha, nrun, maxiterPCG, tolPCG, tol, traceCVcutoff, LOCO);
 
@@ -430,8 +430,7 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
                 setStartEndIndex(startIndex, endIndex, j - 1)
                 Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
 
-                
-                // Placeholder for Get_Coef_multiV function
+        
                 re_coef_W = W;
                 re_coef_Sigma_iY = Y; = X;
                 re_coef_Sigma_iX = X;

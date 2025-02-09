@@ -380,7 +380,7 @@ void getCoefficients_multiV(const arma::vec& Yvec, const arma::mat& Xmat, const 
 
 
 
-void Get_Coef_multiV(const arma::vec& y, const arma::mat& X, const arma::vec& tau, const arma::vec& offset, const arma::vec& var_weights, 
+void Get_Coef(const arma::vec& y, const arma::mat& X, const arma::vec& tau, const arma::vec& offset, const arma::vec& var_weights, 
                     GLMResults* fit0ptr, arma::vec& alpha, arma::vec& eta, arma::vec& Sigma_iY, arma::mat& Sigma_iX, arma::mat& cov, 
                      arma::vec& Y, int maxiterPCG, double tolPCG, int maxiter, bool verbose, bool LOCO) {
     double tol_coef = 0.1;
@@ -424,3 +424,49 @@ void Get_Coef_multiV(const arma::vec& y, const arma::mat& X, const arma::vec& ta
     alpha.print();
 }
    
+
+void fitglmmaiRPCG_multiV_updateTau(const arma::vec& Yvec, const arma::mat& Xmat, const arma::vec& wVec, const arma::vec& tauVec, const arma::ivec& fixtauVec, arma::vec& Sigma_iY, arma::mat& Sigma_iX, arma::mat& cov,
+    arma::vec& alpha, int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff, bool LOCO) {
+    
+    unsigned int k1 = g_num_Kmat;
+    int q2 = arma::sum(fixtauVec == 0);
+    arma::uvec idxtau = arma::find(fixtauVec == 0);
+    arma::vec tau0 = tauVec;
+
+    getAIScore(Yvec, Xmat, wVec, tauVec, fixtauVec, Sigma_iY, Sigma_iX, cov, nrun, maxiterPCG, tolPCG, traceCVcutoff, LOCO, Ivec_start_indices, eMat);
+
+    arma::vec YPAPY = re["YPAPY"];
+    arma::vec Trace = re["Trace"];
+    arma::vec score1 = YPAPY - Trace;
+    arma::mat AI1 = re["AI"];
+    arma::vec Dtau;
+
+    try {
+        Dtau = arma::solve(AI1, score1, arma::solve_opts::allow_ugly);
+    } catch (std::runtime_error&) {
+        std::cout << "arma::solve(AI, score): AI seems singular, using less variant components matrix is suggested." << std::endl;
+        Dtau.zeros();
+    }
+
+    arma::vec Dtau_k1(k1, arma::fill::zeros);
+    int i2 = 0;
+    for (int i = 0; i < k1; i++) {
+        if (fixtauVec(i) == 0) {
+            Dtau_k1(i) = Dtau(i2);
+            i2++;
+        }
+    }
+
+    tau0 = tauVec;
+    tauVec = tauVec + Dtau_k1;
+    
+    tauVec.elem(arma::find(tauVec < tol && tau0 < tol)).zeros();
+    double step = 1.0;
+    while (arma::any(tauVec < 0.0)) {
+        step *= 0.5;
+        tauVec = tau0 + step * Dtau_k1;
+        tauVec.elem(arma::find(tauVec < tol && tau0 < tol)).zeros();
+    }
+    tauVec.elem(arma::find(tauVec < tol)).zeros();
+    
+}
