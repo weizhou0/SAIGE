@@ -799,11 +799,11 @@ void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<st
         const arma::sp_mat& spGRM,
         const arma::ivec& Ivec_start_indices,
         const arma::mat& eMat,
-        const arma::vec& EEt_eigenvalVec,
         const arma::vec& REEt_diagVec,
-        const arma::mat& EEt_eigenvecMat,
-        const NullGENO::NullGenoClass* ptr_gNULLGENOobj
-    ) {
+        const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
+        unsigned int omp_num_threads, 
+        const arma::mat& EEt_sqrtEigenMat
+ ) {
         int Nnomissing = wVec.n_elem;
         arma::vec xVec(Nnomissing);
         xVec.zeros();
@@ -816,7 +816,7 @@ void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<st
             arma::vec crossProdVec(Nnomissing);
             arma::vec zVec(Nnomissing);
             arma::vec minvVec(Nnomissing);
-            minvVec = 1/getDiagOfSigma(wVec, tauVec, LOCO, isGRM, isspGRM, spSigma, Ivec_start_indices, eMat, EEt_eigenvalVec, REEt_diagVec, EEt_eigenvecMat, ptr_gNULLGENOobj);
+            minvVec = 1/getDiagOfSigma(wVec, tauVec, LOCO, isGRM, isspGRM, spSigma, Ivec_start_indices, eMat, REEt_diagVec, EEt_sqrtEigenMat, ptr_gNULLGENOobj, omp_num_threads);
 
             zVec = minvVec % rVec;
 
@@ -828,11 +828,8 @@ void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<st
             arma::colvec ApVec;
             while (sumr2 > tolPCG && iter < maxiterPCG) {
                     iter = iter + 1;
-                    if(eMat.n_rows > 0){
-                            ApVec = getCrossprod_multiV_eMat(pVec, wVec, tauVec, LOCO);
-                    }else{
-                            ApVec = getCrossprod_multiV(pVec, wVec, tauVec, LOCO);
-                    }
+                    ApVec = getCrossprod(pVec, wVec, tauVec, LOCO, omp_num_threads, Ivec_start_indices, isGRM, isspGRM, spGRM, eMat, EEt_sqrtEigenMat, ptr_gNULLGENOobj);
+
                     arma::vec preA = (rVec.t() * zVec)/(pVec.t() * ApVec);
                     double a = preA(0);
                     xVec = xVec + a * pVec;
@@ -865,10 +862,10 @@ arma::vec getDiagOfSigma(
     const arma::sp_mat& spGRM,
     const arma::ivec& Ivec_start_indices,
     const arma::mat& eMat,
-    const arma::vec& EEt_eigenvalVec,
     const arma::vec& REEt_diagVec,
-    const arma::mat& EEt_eigenvecMat,
-    const NullGENO::NullGenoClass* ptr_gNULLGENOobj
+    const arma::mat& EEt_sqrtEigenMat,
+    const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
+    unsigned int omp_num_threads
 ) {
     int Nnomissing = wVec.n_elem;
     arma::vec diagVec(Nnomissing);
@@ -912,7 +909,9 @@ arma::vec getDiagOfSigma(
         tauind = tauind + 1;
         if (isGRM && isspGRM) {
             diagVecG = spGRM.diag();
-            diagVecG_I = diagVecG.elem(g_I_longl_vec);
+            //diagVecG_I = diagVecG.elem(g_I_longl_vec);
+            diagVecG_I = getprodImatbVec(diagVecG, omp_num_threads, Ivec_start_indices);
+
             diagVec = diagVec + tauVec(tauind) * diagVecG_I;
             tauind = tauind + 1;
         } else {
@@ -928,21 +927,21 @@ arma::vec getDiagOfSigma(
                     if (!LOCO) {
                         int MminMAF = ptr_gNULLGENOobj->getnumberofMarkerswithMAFge_minMAFtoConstructGRM();
                         diagVec0.zeros();
-                        for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
-                            diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * ((*ptr_gNULLGENOobj->Get_Diagof_StdGeno()) / MminMAF) % arma::square(EEt_eigenvecMat.col(i));
+                        for (unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++) {
+                            diagVec0 = diagVec0 + ((*ptr_gNULLGENOobj->Get_Diagof_StdGeno()) / MminMAF) % EEt_sqrtEigenMat.col(i);
                         }
                     } else {
                         int Msub_MAFge_minMAFtoConstructGRM_in_b = ptr_gNULLGENOobj->getMsub_MAFge_minMAFtoConstructGRM_in();
                         int Msub_MAFge_minMAFtoConstructGRM_singleVar_b = ptr_gNULLGENOobj->getMsub_MAFge_minMAFtoConstructGRM_singleChr_in();
                         diagVec0.zeros();
-                        for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
-                            diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * ((*ptr_gNULLGENOobj->Get_Diagof_StdGeno_LOCO()) / (Msub_MAFge_minMAFtoConstructGRM_in_b - Msub_MAFge_minMAFtoConstructGRM_singleVar_b)) % arma::square(EEt_eigenvecMat.col(i));
+                        for (unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++) {
+                            diagVec0 = diagVec0 + ((*ptr_gNULLGENOobj->Get_Diagof_StdGeno_LOCO()) / (Msub_MAFge_minMAFtoConstructGRM_in_b - Msub_MAFge_minMAFtoConstructGRM_singleVar_b)) % EEt_sqrtEigenMat.col(i);
                         }
                     }
                 } else {
                     diagVec0.zeros();
-                    for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
-                        diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * (g_spGRM.diag()) % arma::square(EEt_eigenvecMat.col(i));
+                    for (unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++) {
+                        diagVec0 = diagVec0 + (g_spGRM.diag()) % (EEt_sqrtEigenMat.col(i));
                     }
                 }
                 diagVec = diagVec + tauVec(tauind) * diagVec0;
@@ -950,8 +949,8 @@ arma::vec getDiagOfSigma(
                 diagVec = tauVec(1) + tauVec(0) / wVec;
                 tauind = tauind + 2;
                 diagVec0.zeros();
-                for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
-                    diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * arma::square(EEt_eigenvecMat.col(i));
+                for (unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++) {
+                    diagVec0 = diagVec0 + (EEt_sqrtEigenMat.col(i));
                 }
                 diagVec = diagVec + tauVec(tauind) * diagVec0;
             }
@@ -960,10 +959,12 @@ arma::vec getDiagOfSigma(
     } else {
         if (isGRM && isspGRM) {
             diagVecG = spGRM.diag();
-            diagVecG_I = diagVecG.elem(g_I_longl_vec);
+            //diagVecG_I = diagVecG.elem(g_I_longl_vec);
+            diagVecG_I = getprodImatbVec(diagVecG, omp_num_threads, Ivec_start_indices);
+
             diagVec0.zeros();
-            for (unsigned int i = 0; i < EEt_eigenvalVec.n_elem; i++) {
-                diagVec0 = diagVec0 + (EEt_eigenvalVec(i)) * diagVecG_I % arma::square(EEt_eigenvecMat.col(i));
+            for (unsigned int i = 0; i < EEt_sqrtEigenMat.n_cols; i++) {
+                diagVec0 = diagVec0 + diagVecG_I % (EEt_sqrtEigenMat.col(i));
             }
             diagVec = diagVec + tauVec(tauind) * diagVec0;
         } else {
@@ -1330,17 +1331,3 @@ arma::vec getCrossprodMatAndKin_eMat_Imat(arma::colvec& bVec, bool LOCO, const a
     }
     return(crossProdVec);
 }
-
-
-
-const arma::ivec& Ivec_start_indices,
-
-const bool isGRM,
-const bool isspGRM,
-const arma::sp_mat& spGRM,
-
-const arma::mat& eMat,
-const arma::vec& EEt_eigenvalVec,
-const arma::vec& REEt_diagVec,
-const arma::mat& EEt_eigenvecMat,
-const NullGENO::NullGenoClass* ptr_gNULLGENOobj
