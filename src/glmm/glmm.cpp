@@ -362,7 +362,6 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
 
         fitglmmaiRPCG_multiV_updateTau(Y, X, W, tau, fixtau, Sigma_iY, Sigma_iX, cov, alpha, nrun, maxiterPCG, tolPCG, tol, traceCVcutoff, LOCO);
 
-
         mu_eta = fit0.mu_eta(eta);
         sqrtW = mu_eta / arma::sqrt(1 / var_weights % fit0.variance(mu));
         W = arma::square(sqrtW);
@@ -379,11 +378,10 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
     }
 
     std::cout << "\nFinal " << tau << ":\n";
-    Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+    Get_Coef(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
     bool converged = (i <= maxiter);
 
     arma::vec res = y - mu;
-    arma::vec mu2;
     std::string traitType;
 
     arma::vec mu2 = (1/tau[0])*fit0.variance(mu);
@@ -415,6 +413,7 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
     glmmResult.traitType = traitType;
     glmmResult.isCovariateOffset = isCovariateOffset;
     glmmResult.varWeights = var_weights;
+    glmmResult.obj_noK = scoreTestResult;
     glmmResult.LOCO = LOCO;
 
 
@@ -423,46 +422,44 @@ GLMMResults glmmkin_ai_PCG_Rcpp_multiV(
         // Placeholder for set_Diagof_StdGeno_LOCO function
         ptr_gNULLGENOobj->set_Diagof_StdGeno_LOCO();
         arma::mat LOCOResult(22, 1);
+        GLMMResults glmmResultLOCO;
+
         for (int j = 0; j < 22; ++j) {
             int startIndex = chromosomeStartIndexVec[j];
             int endIndex = chromosomeEndIndexVec[j];
             if (startIndex != -1 && endIndex != -1) {
                 setStartEndIndex(startIndex, endIndex, j - 1)
-                Get_Coef_multiV(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+                Get_Coef(y, X, tau, offset, var_weights, fit0ptr, alpha, eta, Sigma_iY, Sigma_iX, cov, Y, maxiterPCG, tolPCG, maxiter, verbose, LOCO);
+                glmmResultLOCO.coefficients = alpha;
+                glmmResultLOCO.linear_predictors = eta;
+                glmmResultLOCO.fitted_values = mu;
+                glmmResultLOCO.Y = Y;
+                glmmResultLOCO.residuals = res;
+                glmmResultLOCO.cov = cov;
+                arma::vec mu2LOCO = (1/tau[0])*fit0.variance(mu);
+                SA_NULL scoreTestResultLOCO;
+                if (!isCovariateOffset) {
+                    scoreTestResultLOCO = ScoreTest_NULL_Model(mu, mu2LOCO, y, X);
+                } else {
+                    scoreTestResultLOCO = ScoreTest_NULL_Model(mu, mu2LOCO, y, Xorig);
+                }
+                glmmResultLOCO.obj_noK = scoreTestResultLOCO;
+                glmmResultLOCO.LOCO = true;
+                glmmResult.LOCOResult.push_back(glmmResultLOCO);
 
-        
-                re_coef_W = W;
-                re_coef_Sigma_iY = Y; = X;
-                re_coef_Sigma_iX = X;
-                re_coef_cov = X;pha0;
-                re_coef_alpha = alpha0;a;
-                re_coef_eta = eta;                
-                re_coef_mu = mu;
-                re_coef_mu = mu;
-oreTest_NULL_Model function
-                // Placeholder for ScoreTest_NULL_Model function                obj_noK_rescaled = X;
-                obj_noK_rescaled = X;
-Result.row(j) = arma::join_horiz(arma::conv_to<arma::vec>::from({1}), re_coef_alpha, re_coef_eta, re_coef_mu, re_coef_Y, y - re_coef_mu, re_coef_cov, obj_noK_rescaled);
-                LOCOResult.row(j) = arma::join_horiz(arma::conv_to<arma::vec>::from({1}), re_coef_alpha, re_coef_eta, re_coef_mu, re_coef_Y, y - re_coef_mu, re_coef_cov, obj_noK_rescaled);
-            } else {   LOCOResult.row(j) = arma::conv_to<arma::vec>::from({0});
-                LOCOResult.row(j) = arma::conv_to<arma::vec>::from({0});   }
+            } else {
+                glmmResultLOCO.LOCO = false;   
             }
-        }   glmmResult = arma::join_horiz(glmmResult, LOCOResult);
-        glmmResult.result = arma::join_horiz(glmmResult.result, LOCOResult);    }
-    }
+            glmmResult.LOCOResult.push_back(glmmResultLOCO);
 
-    if (isLowMemLOCO && LOCO) {   glmmResult = arma::join_horiz(glmmResult, chromosomeStartIndexVec, chromosomeEndIndexVec);
-        glmmResult.result = arma::join_horiz(glmmResult.result, chromosomeStartIndexVec, chromosomeEndIndexVec);    }
+        }
+        glmmResult.chromosomeStartIndexVec <- chromosomeStartIndexVec;
+        glmmResult.chromosomeEndIndexVec <- chromosomeEndIndexVec;
+        
     }
-
     return glmmResult;
-}   return glmmResult;
-}
-    glmmResult["chromosomeEndIndexVec"] = chromosomeEndIndexVec;
-  }
-  
-  return glmmResult;
-}
+}  
+
 
 void readPhenoFile(
     const std::string& phenoFile,
@@ -775,4 +772,26 @@ void readSampleIDsFromSingleColFile(const std::string& sampleIDFile, std::set<st
         std::cout << sampleIDs.size() << " samples found in sample ID file " << sampleIDFileName << std::endl;
     }
 }
+
+
+class GLMMResults {
+public:
+    arma::vec theta;
+    arma::vec coefficients;
+    arma::vec linear_predictors;
+    arma::vec fitted_values;
+    arma::vec Y;
+    arma::vec residuals;
+    arma::mat cov;
+    bool converged;
+    std::vector<std::string> sampleID;
+    GLMResults obj_noK;
+    arma::vec y;
+    arma::mat X;
+    std::string traitType;
+    bool isCovariateOffset;
+    arma::vec varWeights;
+    bool LOCO;
+    std::vector<GLMMResults> LOCOResult; // List of 22 GLMMResults objects
+};
 
