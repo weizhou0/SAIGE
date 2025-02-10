@@ -7,6 +7,8 @@
 #include "stats.hpp"
 #include <unordered_map>
 #include "utils/parameters.h"
+#include "glmm_helper.h"
+#include "glmmresults.h"
 #include "utils/utils.h"
 
 void fitNULLGLMM(const Parameters& params) {
