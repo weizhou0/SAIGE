@@ -372,8 +372,8 @@ int NullGenoClass::Get_OneSNP_StdGeno(size_t SNPIdx, arma::fvec * out) {
 }
 
 
-arma::fvec* NullGenoClass::Get_Diagof_StdGeno() {
-        arma::fvec* temp = &m_OneSNP_StdGeno;
+arma::vec* NullGenoClass::Get_Diagof_StdGeno() {
+        arma::vec* temp = &m_OneSNP_StdGeno;
         // Not yet calculated
         if (size(m_DiagStd)[0] != Nnomissing) {
                 m_DiagStd.zeros(Nnomissing);

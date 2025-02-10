@@ -165,7 +165,7 @@ void getAIScore(const arma::vec& Yvec, const arma::mat& Xmat, const arma::vec& w
 
 void GetTrace(arma::mat Sigma_iX, arma::mat& Xmat, arma::vec& wVec, arma::vec& tauVec, arma::ivec & fixtauVec, arma::mat& cov1, int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, bool LOCO, arma::vec& trace, const arma::uvec & Ivec_start_indices) {
 
-    set_seed(200);
+    std::srand(200);
 
     int q2 = arma::sum(fixtauVec == 0);
     arma::uvec idxtau = arma::find(fixtauVec == 0);

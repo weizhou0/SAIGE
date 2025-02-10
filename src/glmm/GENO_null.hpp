@@ -33,61 +33,61 @@ private:
         const static unsigned char HOM_ALT = 0x3;  // 0b11 ;
         const static unsigned char MISSING = 0x1;  // 0b01 ;
 
-	arma::sp_fmat g_I_longl_mat;
-	arma::sp_fmat g_T_longl_mat;
-	arma::uvec g_I_longl_vec;
-	arma::fvec g_T_longl_vec;
+        arma::sp_mat g_I_longl_mat;
+        arma::sp_mat g_T_longl_mat;
+        arma::uvec g_I_longl_vec;
+        arma::vec g_T_longl_vec;
 
-public:
-	//to chunk the geno vector to avoid large continuous memory usage
+        public:
+        //to chunk the geno vector to avoid large continuous memory usage
         int numMarkersofEachArray;
         int numofGenoArray;
         int numMarkersofLastArray;
         std::vector< std::vector<unsigned char>* > genoVecofPointers;
         ///////////
         std::vector< std::vector<unsigned char>* > genoVecofPointers_forVarRatio;
-        //arma::fvec g_cateVarRatioMinMACVecExclude;
-        //arma::fvec g_cateVarRatioMaxMACVecInclude;
-        float g_minMACVarRatio;
-        float g_maxMACVarRatio;
+        //arma::vec g_cateVarRatioMinMACVecExclude;
+        //arma::vec g_cateVarRatioMaxMACVecInclude;
+        double g_minMACVarRatio;
+        double g_maxMACVarRatio;
         bool isVarRatio = false;
         int numberofMarkers_varRatio = 0;
         int numberofMarkers_varRatio_common = 0;
         arma::ivec g_randMarkerIndforVR;
-        std::vector<float>      invstdvVec0_forVarRatio;
-        arma::fvec      invstdvVec_forVarRatio;
-         std::vector<float>      alleleFreqVec0_forVarRatio;
-        arma::fvec      alleleFreqVec_forVarRatio;
+        std::vector<double>      invstdvVec0_forVarRatio;
+        arma::vec      invstdvVec_forVarRatio;
+         std::vector<double>      alleleFreqVec0_forVarRatio;
+        arma::vec      alleleFreqVec_forVarRatio;
         std::vector<int>      MACVec0_forVarRatio;
         std::vector<int>      markerIndexVec0_forVarRatio;
         arma::ivec MACVec_forVarRatio;
         arma::ivec markerIndexVec_forVarRatio;
-	        //vector<unsigned char> genoVec;
+                //vector<unsigned char> genoVec;
         size_t M;
         size_t N;
         size_t Nnomissing;
-        std::vector<float>      invstdvVec0;
-        arma::fvec      invstdvVec;
+        std::vector<double>      invstdvVec0;
+        arma::vec      invstdvVec;
         vector<int>     ptrsubSampleInGeno;
         std::vector<bool> indicatorGenoSamplesWithPheno_in;
-        std::vector<float>      alleleFreqVec0;
-        arma::fvec      alleleFreqVec;
+        std::vector<double>      alleleFreqVec0;
+        arma::vec      alleleFreqVec;
         arma::ivec      m_OneSNP_Geno;
-        arma::fvec      m_OneSNP_StdGeno;
-        arma::fvec      m_DiagStd;
-        arma::fvec      m_DiagStd_LOCO;
-        arma::fmat      mtx_DiagStd_LOCO;
+        arma::vec      m_OneSNP_StdGeno;
+        arma::vec      m_DiagStd;
+        arma::vec      m_DiagStd_LOCO;
+        arma::mat      mtx_DiagStd_LOCO;
 
 
         std::vector<int>        MACVec0; //for variance ratio based on different MAC categories
         arma::ivec      MACVec;
         arma::ivec      subMarkerIndex; //for sparse GRM
-        arma::fmat      stdGenoMultiMarkersMat;
-        std::vector<float> stdGenoforSamples; //for sparse GRM
-        std::vector<float>     kinValueVecFinal;
-        float relatednessCutoff;
-        float maxMissingRate;
-	        float minMAFtoConstructGRM;
+        arma::mat      stdGenoMultiMarkersMat;
+        std::vector<double> stdGenoforSamples; //for sparse GRM
+        std::vector<double>     kinValueVecFinal;
+        double relatednessCutoff;
+        double maxMissingRate;
+                double minMAFtoConstructGRM;
 
 
         tbb::concurrent_vector< std::pair<int, int> > indiceVec;
@@ -100,7 +100,7 @@ public:
 
         size_t Msub;
         int startIndex;
-	int endIndex;
+        int endIndex;
         int chromIndex;
 
 
@@ -120,61 +120,61 @@ public:
         int m_size_of_esi;
         unsigned char m_bits_val[8];
 
-	//look-up table in a 2D array for sparseKin
-        float sKinLookUpArr[3][3] = {{0}};
+        //look-up table in a 2D array for sparseKin
+        double sKinLookUpArr[3][3] = {{0}};
 
-	//look-up table for std geno
-        //float stdGenoLookUpArr[3] = {0};
-	//
-	//
-	//NullGenoClass(std::string bedfile, std::string bimfile, std::string famfile, std::vector<int> & subSampleInGeno, std::vector<bool> & indicatorGenoSamplesWithPheno, float memoryChunk, bool  isDiagofKinSetAsOne);
-	NullGenoClass();
+        //look-up table for std geno
+        //double stdGenoLookUpArr[3] = {0};
+        //
+        //
+        //NullGenoClass(std::string bedfile, std::string bimfile, std::string famfile, std::vector<int> & subSampleInGeno, std::vector<bool> & indicatorGenoSamplesWithPheno, double memoryChunk, bool  isDiagofKinSetAsOne);
+        NullGenoClass();
 
-	void setStdGenoLookUpArr(float mafVal, float invsdVal, arma::fvec & stdGenoLookUpArr);
-
-
-        void setSparseKinLookUpArr(float mafVal, float invsdVal);
-	void setBit(unsigned char & ch, int ii, int aVal, int bVal);
-	void setGenotype(unsigned char* c, const int pos, const int geno);
-	void getGenotype(unsigned char* c, const int pos, int& geno);
-
-	void setstartendIndexVec(arma::ivec & t_startIndexVec, arma::ivec & t_endIndexVec);
+        void setStdGenoLookUpArr(double mafVal, double invsdVal, arma::vec & stdGenoLookUpArr);
 
 
+        void setSparseKinLookUpArr(double mafVal, double invsdVal);
+        void setBit(unsigned char & ch, int ii, int aVal, int bVal);
+        void setGenotype(unsigned char* c, const int pos, const int geno);
+        void getGenotype(unsigned char* c, const int pos, int& geno);
 
-	void Init_OneSNP_Geno();
+        void setstartendIndexVec(arma::ivec & t_startIndexVec, arma::ivec & t_endIndexVec);
 
-	arma::ivec * Get_OneSNP_Geno(size_t SNPIdx);
 
-	arma::ivec * Get_OneSNP_Geno_forVarRatio(size_t SNPIdx);
 
-	void Get_OneSNP_Geno_atBeginning(size_t SNPIdx, vector<int> & indexNA, vector<unsigned char> & genoVecOneMarkerOld, float & altFreq, float & missingRate, int & mac,  int & alleleCount, bool & passQC, size_t SNPIdx_new, bool & passVarRatio , size_t SNPIdx_vr);
+        void Init_OneSNP_Geno();
 
-	int Get_OneSNP_StdGeno(size_t SNPIdx, arma::fvec * out );
+        arma::ivec * Get_OneSNP_Geno(size_t SNPIdx);
 
-	arma::fvec * Get_Diagof_StdGeno();
+        arma::ivec * Get_OneSNP_Geno_forVarRatio(size_t SNPIdx);
 
-	arma::fvec * Get_Diagof_StdGeno_LOCO();
+        void Get_OneSNP_Geno_atBeginning(size_t SNPIdx, vector<int> & indexNA, vector<unsigned char> & genoVecOneMarkerOld, double & altFreq, double & missingRate, int & mac,  int & alleleCount, bool & passQC, size_t SNPIdx_new, bool & passVarRatio , size_t SNPIdx_vr);
 
-	void setGenoObj(std::string bedfile, std::string bimfile, std::string famfile, std::vector<int> & subSampleInGeno, std::vector<bool> & indicatorGenoSamplesWithPheno, float memoryChunk, bool  isDiagofKinSetAsOne);
+        int Get_OneSNP_StdGeno(size_t SNPIdx, arma::vec * out );
 
-	void printFromgenoVec(unsigned char genoBinary0);
+        arma::vec * Get_Diagof_StdGeno();
 
-	int getM() const;
-	int getnumberofMarkerswithMAFge_minMAFtoConstructGRM() const;
+        arma::vec * Get_Diagof_StdGeno_LOCO();
 
-	int getMsub() const;
-	int getStartIndex() const;
-	int getEndIndex() const;
+        void setGenoObj(std::string bedfile, std::string bimfile, std::string famfile, std::vector<int> & subSampleInGeno, std::vector<bool> & indicatorGenoSamplesWithPheno, double memoryChunk, bool  isDiagofKinSetAsOne);
+
+        void printFromgenoVec(unsigned char genoBinary0);
+
+        int getM() const;
+        int getnumberofMarkerswithMAFge_minMAFtoConstructGRM() const;
+
+        int getMsub() const;
+        int getStartIndex() const;
+        int getEndIndex() const;
         int getN() const;
         int getNnomissing() const;
-        float getAC(int m);
-	float getMAC(int m);
-	int getMsub_MAFge_minMAFtoConstructGRM_in() const;
-	int getMsub_MAFge_minMAFtoConstructGRM_singleChr_in() const;
-	void Get_Samples_StdGeno(arma::ivec SampleIdsVec);
+        double getAC(int m);
+        double getMAC(int m);
+        int getMsub_MAFge_minMAFtoConstructGRM_in() const;
+        int getMsub_MAFge_minMAFtoConstructGRM_singleChr_in() const;
+        void Get_Samples_StdGeno(arma::ivec SampleIdsVec);
  
-	
+        
 };
 
 }

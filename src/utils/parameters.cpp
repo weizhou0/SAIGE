@@ -1,5 +1,6 @@
 #include "parameters.h"
 #include "utils.h"
+#include "validation.h"
 #include <iostream>
 #include <cstring>
 
@@ -23,12 +24,21 @@ bool Parameters::parse(int argc, char* argv[]) {
 
 struct Step1Parameters {
     std::string plinkFile;
+    std::string bedFile;
+    std::string bimFile;
+    std::string famFile;
     std::string phenoFile;
     std::string phenoCol;
+    bool isRemoveZerosinPheno;
     std::string traitType;
     bool invNormalize;
     std::vector<std::string> covarColList;
     std::vector<std::string> qCovarCol;
+    std::vector<std::string> eCovarCol;
+    std::vector<std::string> sampleCovarCol;
+    std::vector<std::string> offsetCol;
+    std::vector<std::string> varWeightsCol;
+    std::string longlCol;
     std::string sampleIDColinphenoFile;
     double tol;
     int maxiter;
@@ -41,6 +51,7 @@ struct Step1Parameters {
     double memoryChunk;
     std::vector<double> tauInit;
     bool LOCO;
+    bool isLowMemLOCO;
     double traceCVcutoff;
     double ratioCVcutoff;
     std::string outputPrefix;
@@ -56,12 +67,29 @@ struct Step1Parameters {
     std::vector<double> cateVarRatioMaxMACVecInclude;
     bool isCovariateTransform;
     bool isDiagofKinSetAsOne;
+    int minCovariateCount;
+    double minMAFforGRM;
+    double maxMissingRateforGRM;
     bool useSparseGRMtoFitNULL;
     bool useSparseGRMforVarRatio;
     bool includeNonautoMarkersforVarRatio;
+    std::string sexCol;
+    int FemaleCode;
+    bool FemaleOnly;
+    int MaleCode;
+    bool MaleOnly;
+    std::string SampleIDIncludeFile;
+    bool isCovariateOffset;
+    bool skipVarianceRatioEstimation;
+    int nrun;
+    std::string VmatFilelist;
+    std::string VmatSampleFilelist;
+    std::string VcellmatFilelist;
+    std::string VcellmatSampleFilelist;
+    bool useGRMtoFitNULL;
     bool isStoreSigma;
     bool isShrinkModelOutput;
-};
+};;
 
 struct Step2Parameters {
     std::string vcfFile;
@@ -133,12 +161,21 @@ struct Parameters {
 bool parseStep1Parameters(int argc, char* argv[], Step1Parameters& params) {
     static struct option long_options[] = {
         {"plinkFile", required_argument, 0, 0},
+        {"bedFile", required_argument, 0, 0},
+        {"bimFile", required_argument, 0, 0},
+        {"famFile", required_argument, 0, 0},
         {"phenoFile", required_argument, 0, 0},
         {"phenoCol", required_argument, 0, 0},
+        {"isRemoveZerosinPheno", no_argument, 0, 0},
         {"traitType", required_argument, 0, 0},
         {"invNormalize", no_argument, 0, 0},
         {"covarColList", required_argument, 0, 0},
         {"qCovarCol", required_argument, 0, 0},
+        {"eCovarCol", required_argument, 0, 0},
+        {"sampleCovarCol", required_argument, 0, 0},
+        {"offsetCol", required_argument, 0, 0},
+        {"varWeightsCol", required_argument, 0, 0},
+        {"longlCol", required_argument, 0, 0},
         {"sampleIDColinphenoFile", required_argument, 0, 0},
         {"tol", required_argument, 0, 0},
         {"maxiter", required_argument, 0, 0},
@@ -151,6 +188,7 @@ bool parseStep1Parameters(int argc, char* argv[], Step1Parameters& params) {
         {"memoryChunk", required_argument, 0, 0},
         {"tauInit", required_argument, 0, 0},
         {"LOCO", no_argument, 0, 0},
+        {"isLowMemLOCO", no_argument, 0, 0},
         {"traceCVcutoff", required_argument, 0, 0},
         {"ratioCVcutoff", required_argument, 0, 0},
         {"outputPrefix", required_argument, 0, 0},
@@ -166,9 +204,26 @@ bool parseStep1Parameters(int argc, char* argv[], Step1Parameters& params) {
         {"cateVarRatioMaxMACVecInclude", required_argument, 0, 0},
         {"isCovariateTransform", no_argument, 0, 0},
         {"isDiagofKinSetAsOne", no_argument, 0, 0},
+        {"minCovariateCount", required_argument, 0, 0},
+        {"minMAFforGRM", required_argument, 0, 0},
+        {"maxMissingRateforGRM", required_argument, 0, 0},
         {"useSparseGRMtoFitNULL", no_argument, 0, 0},
         {"useSparseGRMforVarRatio", no_argument, 0, 0},
         {"includeNonautoMarkersforVarRatio", no_argument, 0, 0},
+        {"sexCol", required_argument, 0, 0},
+        {"FemaleCode", required_argument, 0, 0},
+        {"FemaleOnly", no_argument, 0, 0},
+        {"MaleCode", required_argument, 0, 0},
+        {"MaleOnly", no_argument, 0, 0},
+        {"SampleIDIncludeFile", required_argument, 0, 0},
+        {"isCovariateOffset", no_argument, 0, 0},
+        {"skipVarianceRatioEstimation", no_argument, 0, 0},
+        {"nrun", required_argument, 0, 0},
+        {"VmatFilelist", required_argument, 0, 0},
+        {"VmatSampleFilelist", required_argument, 0, 0},
+        {"VcellmatFilelist", required_argument, 0, 0},
+        {"VcellmatSampleFilelist", required_argument, 0, 0},
+        {"useGRMtoFitNULL", no_argument, 0, 0},
         {"isStoreSigma", no_argument, 0, 0},
         {"isShrinkModelOutput", no_argument, 0, 0},
         {0, 0, 0, 0}
@@ -183,127 +238,300 @@ bool parseStep1Parameters(int argc, char* argv[], Step1Parameters& params) {
             case 0:
                 switch (option_index) {
                     case 0: params.plinkFile = optarg; break;
-                    case 1: params.phenoFile = optarg; break;
-                    case 2: params.phenoCol = optarg; break;
-                    case 3: params.traitType = optarg; break;
-                    case 4: params.invNormalize = true; break;
-                    case 5: params.covarColList = split(optarg, ','); break;
-                    case 6: params.qCovarCol = split(optarg, ','); break;
-                    case 7: params.sampleIDColinphenoFile = optarg; break;
-                    case 8: params.tol = std::stod(optarg); break;
-                    case 9: params.maxiter = std::stoi(optarg); break;
-                    case 10: params.tolPCG = std::stod(optarg); break;
-                    case 11: params.maxiterPCG = std::stoi(optarg); break;
-                    case 12: params.nThreads = std::stoi(optarg); break;
-                    case 13: params.SPAcutoff = std::stod(optarg); break;
-                    case 14: params.numMarkersForVarRatio = std::stoi(optarg); break;
-                    case 15: params.skipModelFitting = true; break;
-                    case 16: params.memoryChunk = std::stod(optarg); break;
-                    case 17: params.tauInit = splitToDouble(optarg, ','); break;
-                    case 18: params.LOCO = true; break;
-                    case 19: params.traceCVcutoff = std::stod(optarg); break;
-                    case 20: params.ratioCVcutoff = std::stod(optarg); break;
-                    case 21: params.outputPrefix = optarg; break;
-                    case 22: params.outputPrefix_varRatio = optarg; break;
-                    case 23: params.IsOverwriteVarianceRatioFile = true; break;
-                    case 24: params.sparseGRMFile = optarg; break;
-                    case 25: params.sparseGRMSampleIDFile = optarg; break;
-                    case 26: params.numRandomMarkerforSparseKin = std::stoi(optarg); break;
-                    case 27: params.relatednessCutoff = std::stod(optarg); break;
-                    case 28: params.isCateVarianceRatio = true; break;
-                    case 29: params.cateVarRatioIndexVec = splitToInt(optarg, ','); break;
-                    case 30: params.cateVarRatioMinMACVecExclude = splitToDouble(optarg, ','); break;
-                    case 31: params.cateVarRatioMaxMACVecInclude = splitToDouble(optarg, ','); break;
-                    case 32: params.isCovariateTransform = true; break;
-                    case 33: params.isDiagofKinSetAsOne = true; break;
-                    case 34: params.useSparseGRMtoFitNULL = true; break;
-                    case 35: params.useSparseGRMforVarRatio = true; break;
-                    case 36: params.includeNonautoMarkersforVarRatio = true; break;
-                    case 37: params.isStoreSigma = true; break;
-                    params.isShrinkModelOutput = true; break;
+                    case 1: params.bedFile = optarg; break;
+                    case 2: params.bimFile = optarg; break;
+                    case 3: params.famFile = optarg; break;
+                    case 4: params.phenoFile = optarg; break;
+                    case 5: params.phenoCol = optarg; break;
+                    case 6: params.isRemoveZerosinPheno = true; break;
+                    case 7: params.traitType = optarg; break;
+                    case 8: params.invNormalize = true; break;
+                    case 9: params.covarColList = split(optarg, ','); break;
+                    case 10: params.qCovarCol = split(optarg, ','); break;
+                    case 11: params.eCovarCol = split(optarg, ','); break;
+                    case 12: params.sampleCovarCol = split(optarg, ','); break;
+                    case 13: params.offsetCol = split(optarg, ','); break;
+                    case 14: params.varWeightsCol = split(optarg, ','); break;
+                    case 15: params.longlCol = optarg; break;
+                    case 16: params.sampleIDColinphenoFile = optarg; break;
+                    case 17: params.tol = std::stod(optarg); break;
+                        if (isDouble(optarg)) {
+                            params.tol = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for tol: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                        case 18: 
+                        if (isInt(optarg)) {
+                            params.maxiter = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for maxiter: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 19: 
+                        if (isDouble(optarg)) {
+                            params.tolPCG = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for tolPCG: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 20: 
+                        if (isInt(optarg)) {
+                            params.maxiterPCG = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for maxiterPCG: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 21: 
+                        if (isInt(optarg)) {
+                            params.nThreads = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for nThreads: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 22: 
+                        if (isDouble(optarg)) {
+                            params.SPAcutoff = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for SPAcutoff: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 23: 
+                        if (isInt(optarg)) {
+                            params.numMarkersForVarRatio = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for numMarkersForVarRatio: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 24: params.skipModelFitting = true; break;
+                    case 25: 
+                        if (isDouble(optarg)) {
+                            params.memoryChunk = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for memoryChunk: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 26: 
+                        if (isDoubleVector(optarg, ',')) {
+                            params.tauInit = splitToDouble(optarg, ',');
+                        } else {
+                            std::cerr << "Invalid value for tauInit: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 27: params.LOCO = true; break;
+                    case 28: params.isLowMemLOCO = true; break;
+                    case 29: 
+                        if (isDouble(optarg)) {
+                            params.traceCVcutoff = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for traceCVcutoff: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 30: 
+                        if (isDouble(optarg)) {
+                            params.ratioCVcutoff = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for ratioCVcutoff: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 31: params.outputPrefix = optarg; break;
+                    case 32: params.outputPrefix_varRatio = optarg; break;
+                    case 33: params.IsOverwriteVarianceRatioFile = true; break;
+                    case 34: params.sparseGRMFile = optarg; break;
+                    case 35: params.sparseGRMSampleIDFile = optarg; break;
+                    case 36: 
+                        if (isInt(optarg)) {
+                            params.numRandomMarkerforSparseKin = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for numRandomMarkerforSparseKin: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 37: 
+                        if (isDouble(optarg)) {
+                            params.relatednessCutoff = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for relatednessCutoff: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 38: params.isCateVarianceRatio = true; break;
+                    case 39: 
+                        if (isIntVector(optarg, ',')) {
+                            params.cateVarRatioIndexVec = splitToInt(optarg, ',');
+                        } else {
+                            std::cerr << "Invalid value for cateVarRatioIndexVec: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 40: 
+                        if (isDoubleVector(optarg, ',')) {
+                            params.cateVarRatioMinMACVecExclude = splitToDouble(optarg, ',');
+                        } else {
+                            std::cerr << "Invalid value for cateVarRatioMinMACVecExclude: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 41: 
+                        if (isDoubleVector(optarg, ',')) {
+                            params.cateVarRatioMaxMACVecInclude = splitToDouble(optarg, ',');
+                        } else {
+                            std::cerr << "Invalid value for cateVarRatioMaxMACVecInclude: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 42: params.isCovariateTransform = true; break;
+                    case 43: params.isDiagofKinSetAsOne = true; break;
+                    case 44: 
+                        if (isInt(optarg)) {
+                            params.minCovariateCount = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for minCovariateCount: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 45: 
+                        if (isDouble(optarg)) {
+                            params.minMAFforGRM = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for minMAFforGRM: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 46: 
+                        if (isDouble(optarg)) {
+                            params.maxMissingRateforGRM = std::stod(optarg);
+                        } else {
+                            std::cerr << "Invalid value for maxMissingRateforGRM: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 47: params.useSparseGRMtoFitNULL = true; break;
+                    case 48: params.useSparseGRMforVarRatio = true; break;
+                    case 49: params.includeNonautoMarkersforVarRatio = true; break;
+                    case 50: params.sexCol = optarg; break;
+                    case 51: 
+                        if (isInt(optarg)) {
+                            params.FemaleCode = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for FemaleCode: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 52: params.FemaleOnly = true; break;
+                    case 53: 
+                        if (isInt(optarg)) {
+                            params.MaleCode = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for MaleCode: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 54: params.MaleOnly = true; break;
+                    case 55: params.SampleIDIncludeFile = optarg; break;
+                    case 56: params.isCovariateOffset = true; break;
+                    case 57: params.skipVarianceRatioEstimation = true; break;
+                    case 58: 
+                        if (isInt(optarg)) {
+                            params.nrun = std::stoi(optarg);
+                        } else {
+                            std::cerr << "Invalid value for nrun: " << optarg << std::endl;
+                            return false;
+                        }
+                        break;
+                    case 59: params.VmatFilelist = optarg; break;
+                    case 60: params.VmatSampleFilelist = optarg; break;
+                    case 61: params.VcellmatFilelist = optarg; break;
+                    case 62: params.VcellmatSampleFilelist = optarg; break;
+                    case 63: params.useGRMtoFitNULL = true; break;
+                    case 64: params.isStoreSigma = true; break;
+                    case 65: params.isShrinkModelOutput = true; break;
                     default:
                         std::cerr << "Unknown parameter: " << argv[optind - 1] << std::endl;
                         return false;
-                    }
-                    }
-
-                    // Check if file parameters exist
-                    if (!params.plinkFile.empty()) {
-                        params.bedFile = params.plinkFile + ".bed";
-                        params.bimFile = params.plinkFile + ".bim";
-                        params.famFile = params.plinkFile + ".fam";
-                        if (!fileExists(params.bedFile)) {
-                            std::cerr << "File not found: " << params.bedFile << std::endl;
-                            return false;
-                        }
-                        if (!fileExists(params.bimFile)) {
-                            std::cerr << "File not found: " << params.bimFile << std::endl;
-                            return false;
-                        }
-                        if (!fileExists(params.famFile)) {
-                            std::cerr << "File not found: " << params.famFile << std::endl;
-                            return false;
-                        }
-                    }
-                    
-                    if (!params.phenoFile.empty() && !fileExists(params.phenoFile)) {
-                        std::cerr << "File not found: " << params.phenoFile << std::endl;
-                        return false;
-                    }
-                    if (!params.sparseGRMFile.empty()) {
-                        if (params.sparseGRMSampleIDFile.empty() || !fileExists(params.sparseGRMSampleIDFile)) {
-                            std::cerr << "sparseGRMSampleIDFile must be specified and exist when sparseGRMFile is specified" << std::endl;
-                            return false;
-                        }
-                        if (!fileExists(params.sparseGRMFile)) {
-                            std::cerr << "File not found: " << params.sparseGRMFile << std::endl;
-                            return false;
-                        }
-                    }
-                    if (FemaleOnly && MaleOnly) {
-                        std::cerr << "Both FemaleOnly and MaleOnly are TRUE. Please specify only one of them as TRUE to run the sex-specific job" << std::endl;
-                        return false;
-                    }
-
-                    if (FemaleOnly) {
-                        params.outputPrefix += "_FemaleOnly";
-                        std::cout << "Female-specific model will be fitted. Samples coded as " << FemaleCode << " in the column " << sexCol << " in the phenotype file will be included" << std::endl;
-                    } else if (MaleOnly) {
-                        params.outputPrefix += "_MaleOnly";
-                        std::cout << "Male-specific model will be fitted. Samples coded as " << MaleCode << " in the column " << sexCol << " in the phenotype file will be included" << std::endl;
-                    }
-        if ((!params.useSparseGRMtoFitNULL && params.useGRMtoFitNULL) || !params.skipVarianceRatioEstimation) {
-            if (!fileExists(params.bedFile)) {
-                std::cerr << "ERROR! bed file does not exist" << std::endl;
-                return false;
-            }
-            if (!fileExists(params.bimFile)) {
-                std::cerr << "ERROR! bim file does not exist" << std::endl;
-                return false;
-            } else {
-                if (params.LOCO) {
-                    std::vector<std::string> chrVec = readBimFile(params.bimFile);
-                    auto updatechrList = updateChrStartEndIndexVec(chrVec);
-                    params.LOCO = updatechrList.LOCO;
-                    params.chromosomeStartIndexVec = updatechrList.chromosomeStartIndexVec;
-                    params.chromosomeEndIndexVec = updatechrList.chromosomeEndIndexVec;
                 }
-                if (!params.LOCO) {
-                    params.chromosomeStartIndexVec.assign(22, NA);
-                    params.chromosomeEndIndexVec.assign(22, NA);
-                }
-            }
-        }
-                    return true;
-                    }
-
-                    bool fileExists(const std::string& filename) {
-                        std::ifstream file(filename);
-                        return file.good();
-                    }
+                break;
+            default:
                 std::cerr << "Unknown parameter: " << argv[optind - 1] << std::endl;
                 return false;
         }
+    }
+
+    // Check if file parameters exist
+    if (!params.plinkFile.empty()) {
+        params.bedFile = params.plinkFile + ".bed";
+        params.bimFile = params.plinkFile + ".bim";
+        params.famFile = params.plinkFile + ".fam";
+        if (!fileExists(params.bedFile)) {
+            std::cerr << "File not found: " << params.bedFile << std::endl;
+            return false;
+        }
+        if (!fileExists(params.bimFile)) {
+            std::cerr << "File not found: " << params.bimFile << std::endl;
+            return false;
+        }
+        if (!fileExists(params.famFile)) {
+            std::cerr << "File not found: " << params.famFile << std::endl;
+            return false;
+        }
+    }
+
+    if (!params.phenoFile.empty() && !fileExists(params.phenoFile)) {
+        std::cerr << "File not found: " << params.phenoFile << std::endl;
+        return false;
+    }
+    if (!params.sparseGRMFile.empty()) {
+        if (params.sparseGRMSampleIDFile.empty() || !fileExists(params.sparseGRMSampleIDFile)) {
+            std::cerr << "sparseGRMSampleIDFile must be specified and exist when sparseGRMFile is specified" << std::endl;
+            return false;
+        }
+        if (!fileExists(params.sparseGRMFile)) {
+            std::cerr << "File not found: " << params.sparseGRMFile << std::endl;
+            return false;
+        }
+    }
+    if (params.FemaleOnly && params.MaleOnly) {
+        std::cerr << "Both FemaleOnly and MaleOnly are TRUE. Please specify only one of them as TRUE to run the sex-specific job" << std::endl;
+        return false;
+    }
+
+    if (params.FemaleOnly) {
+        params.outputPrefix += "_FemaleOnly";
+        std::cout << "Female-specific model will be fitted. Samples coded as " << params.FemaleCode << " in the column " << params.sexCol << " in the phenotype file will be included" << std::endl;
+    } else if (params.MaleOnly) {
+        params.outputPrefix += "_MaleOnly";
+        std::cout << "Male-specific model will be fitted. Samples coded as " << params.MaleCode << " in the column " << params.sexCol << " in the phenotype file will be included" << std::endl;
+    }
+
+    if ((!params.useSparseGRMtoFitNULL && params.useGRMtoFitNULL) || !params.skipVarianceRatioEstimation) {
+        if (!fileExists(params.bedFile)) {
+            std::cerr << "ERROR! bed file does not exist" << std::endl;
+            return false;
+        }
+        if (!fileExists(params.bimFile)) {
+            std::cerr << "ERROR! bim file does not exist" << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool fileExists(const std::string& filename) {
+    std::ifstream file(filename);
+    return file.good();
+}
     }
     return true;
 }
@@ -376,8 +604,183 @@ bool parseStep2Parameters(int argc, char* argv[], Step2Parameters& params) {
 
         switch (c) {
             case 0:
-                switch (option_index) {
-                    case 0: params.vcfFile = optarg; break;
+            switch (option_index) {
+            case 0: params.vcfFile = optarg; break;
+            case 1: params.vcfFileIndex = optarg; break;
+            case 2: params.vcfField = optarg; break;
+            case 3: params.savFile = optarg; break;
+            case 4: params.savFileIndex = optarg; break;
+            case 5: params.bgenFile = optarg; break;
+            case 6: params.bgenFileIndex = optarg; break;
+            case 7: params.sampleFile = optarg; break;
+            case 8: params.bedFile = optarg; break;
+            case 9: params.bimFile = optarg; break;
+            case 10: params.famFile = optarg; break;
+            case 11: params.AlleleOrder = optarg; break;
+            case 12: params.idstoIncludeFile = optarg; break;
+            case 13: params.rangestoIncludeFile = optarg; break;
+            case 14: params.chrom = optarg; break;
+            case 15: params.is_imputed_data = true; break;
+            case 16: 
+            if (isDouble(optarg)) {
+                params.minMAF = std::stod(optarg);
+            } else {
+                std::cerr << "Invalid value for minMAF: " << optarg << std::endl;
+                return false;
+            }
+            break;
+            case 17: 
+            if (isDouble(optarg)) {
+                params.minMAC = std::stod(optarg);
+            } else {
+                std::cerr << "Invalid value for minMAC: " << optarg << std::endl;
+                return false;
+            }
+            break;
+            case 18: 
+            if (isDouble(optarg)) {
+                params.minGroupMAC_in_BurdenTest = std::stod(optarg);
+            } else {
+                std::cerr << "Invalid value for minGroupMAC_in_BurdenTest: " << optarg << std::endl;
+                return false;
+            }
+            break;
+            case 19: 
+            if (isDouble(optarg)) {
+                params.minInfo = std::stod(optarg);
+            } else {
+                std::cerr << "Invalid value for minInfo: " << optarg << std::endl;
+                return false;
+            }
+            break;
+            case 20: 
+            if (isDouble(optarg)) {
+                params.maxMissing = std::stod(optarg);
+            } else {
+                std::cerr << "Invalid value for maxMissing: " << optarg << std::endl;
+                return false;
+            }
+            break;
+            case 21: params.impute_method = optarg; break;
+            case
+                case 23: params.GMMATmodelFile = optarg; break;
+                case 24: params.varianceRatioFile = optarg; break;
+                case 25: params.SAIGEOutputFile = optarg; break;
+                case 26: 
+                if (isInt(optarg)) {
+                    params.markers_per_chunk = std::stoi(optarg);
+                } else {
+                    std::cerr << "Invalid value for markers_per_chunk: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 27: 
+                if (isInt(optarg)) {
+                    params.groups_per_chunk = std::stoi(optarg);
+                } else {
+                    std::cerr << "Invalid value for groups_per_chunk: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 28: params.is_output_moreDetails = true; break;
+                case 29: params.is_overwrite_output = true; break;
+                case 30: params.maxMAF_in_groupTest = optarg; break;
+                case 31: params.maxMAC_in_groupTest = optarg; break;
+                case 32: params.annotation_in_groupTest = optarg; break;
+                case 33: params.groupFile = optarg; break;
+                case 34: params.sparseGRMFile = optarg; break;
+                case 35: params.sparseGRMSampleIDFile = optarg; break;
+                case 36: 
+                if (isDouble(optarg)) {
+                    params.relatednessCutoff = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for relatednessCutoff: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 37: 
+                if (isDouble(optarg)) {
+                    params.MACCutoff_to_CollapseUltraRare = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for MACCutoff_to_CollapseUltraRare: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 38: params.cateVarRatioMinMACVecExclude = optarg; break;
+                case 39: params.cateVarRatioMaxMACVecInclude = optarg; break;
+                case 40: params.weights_beta = optarg; break;
+                case 41: 
+                if (isDouble(optarg)) {
+                    params.r_corr = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for r_corr: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 42: 
+                if (isInt(optarg)) {
+                    params.markers_per_chunk_in_groupTest = std::stoi(optarg);
+                } else {
+                    std::cerr << "Invalid value for markers_per_chunk_in_groupTest: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 43: params.condition = optarg; break;
+                case 44: params.weights_for_condition = optarg; break;
+                case 45: 
+                if (isDouble(optarg)) {
+                    params.SPAcutoff = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for SPAcutoff: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 46: 
+                if (isDouble(optarg)) {
+                    params.dosage_zerod_cutoff = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for dosage_zerod_cutoff: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 47: 
+                if (isDouble(optarg)) {
+                    params.dosage_zerod_MAC_cutoff = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for dosage_zerod_MAC_cutoff: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 48: params.is_single_in_groupTest = true; break;
+                case 49: params.is_no_weight_in_groupTest = true; break;
+                case 50: params.is_output_markerList_in_groupTest = true; break;
+                case 51: params.is_Firth_beta = true; break;
+                case 52: 
+                if (isDouble(optarg)) {
+                    params.pCutoffforFirth = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for pCutoffforFirth: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                case 53: params.is_fastTest = true; break;
+                case 54: 
+                if (isDouble(optarg)) {
+                    params.max_MAC_for_ER = std::stod(optarg);
+                } else {
+                    std::cerr << "Invalid value for max_MAC_for_ER: " << optarg << std::endl;
+                    return false;
+                }
+                break;
+                default:
+                std::cerr << "Unknown parameter: " << argv[optind - 1] << std::endl;
+                return false;
+            }
+            break;
+            default:
+            std::cerr << "Unknown parameter: " << argv[optind - 1] << std::endl;
+            return false;
+        }break;
                     case 1: params.vcfFileIndex = optarg; break;
                     case 2: params.vcfField = optarg; break;
                     case 3: params.savFile = optarg; break;

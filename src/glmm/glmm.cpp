@@ -177,6 +177,7 @@ void fitNULLGLMM(const Parameters& params) {
         isCovariateOffset,
         tau,
         fixtau,
+        params.isCovariateOffset,
         params.maxiter,
         params.tol,
         params.verbose,

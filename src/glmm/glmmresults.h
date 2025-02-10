@@ -1,12 +1,10 @@
-#ifndef GLMM_H
-#define GLMM_H
+#ifndef GLMMRESULTS_H
+#define GLMMRESULTS_H
 
 #include <armadillo>
 #include <string>
 #include <vector>
-#include "utils/parameters.h"
-#include "utils/utils.h"
-#include "GENO_null.hpp"
+#include <functional>
 
 // Structure to hold the result of the GLMM fitting
 struct GLMMResults {
@@ -60,44 +58,4 @@ struct GLMMResults {
     }
 };
 
-// Function to fit the null GLMM
-GLMMResults glmmkin_ai_PCG(
-    const NullGENO::NullGenoClass* ptr_gNULLGENOobj,
-    const arma::mat& X,
-    const arma::vec& y,
-    const std::string& family,
-    const arma::vec& offset,
-    const arma::vec& var_weights,
-    const std::vector<std::string>& sampleIDsinPheno,
-    bool isCovariateOffset,
-    arma::vec tau,
-    arma::vec fixtau,
-    int maxiter,
-    double tol,
-    bool verbose,
-    int nrun,
-    double tolPCG,
-    int maxiterPCG,
-    const arma::mat& subPheno,
-    const arma::vec& indicatorGenoSamplesWithPheno,
-    const arma::mat& out_transform,
-    const arma::vec& tauInit,
-    double memoryChunk,
-    bool LOCO,
-    const arma::vec& chromosomeStartIndexVec,
-    const arma::vec& chromosomeEndIndexVec,
-    double traceCVcutoff,
-    bool isCovariateTransform,
-    bool isDiagofKinSetAsOne,
-    bool isLowMemLOCO,
-    const arma::mat& covarianceIdxMat,
-    bool isStoreSigma,
-    bool useSparseGRMtoFitNULL,
-    bool useGRMtoFitNULL,
-    bool isSparseGRMIdentity
-);
-
-// Function to fit the null GLMM
-void fitNULLGLMM(const Parameters& params);
-
-#endif // GLMM_H
+#endif // GLMMRESULTS_H
