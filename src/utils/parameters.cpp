@@ -3,6 +3,12 @@
 #include "validation.h"
 #include <iostream>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <stdexcept>
+#include <filesystem>
+#include <numeric>
 
 bool Parameters::parse(int argc, char* argv[]) {
     if (strcmp(argv[1], "--step") == 0 && argc > 2) {
@@ -1079,54 +1085,12 @@ void checkFiles(const std::vector<std::string>& filePaths) {
     }
 }
 void preprocessData(const Parameters& params) {
-    
     std::cout << "Preprocessing data" << std::endl;
+
     // Check if the bed, bim, and fam files exist
-    if (!std::filesystem::exists(params.bedFile)) {
-        throw std::runtime_error("ERROR! bed file does not exist");
-    }
-    if (!std::filesystem::exists(params.bimFile)) {
-        throw std::runtime_error("ERROR! bim file does not exist");
-    }
-    if (!std::filesystem::exists(params.famFile)) {
-        throw std::runtime_error("ERROR! fam file does not exist");
-    }
+    checkFiles({params.bedFile, params.bimFile, params.famFile});
 
-
-    if (!fileExists(famFile)) {
-        stop("ERROR! fam file does not exist\n");
-      } else {
-        if (famFile.empty()) {
-        stop("ERROR! fam file is not specified\n");
-        }
-        std::vector<std::string> sampleListwithGenov0 = readFile(famFile);
-        std::vector<std::string> IIDgeno;
-        for (const auto& line : sampleListwithGenov0) {
-        std::vector<std::string> tokens = split(line, ' ');
-        IIDgeno.push_back(tokens[1]);
-        }
-        std::vector<int> IndexGeno(IIDgeno.size());
-        std::iota(IndexGeno.begin(), IndexGeno.end(), 1);
-        std::cout << IIDgeno.size() << " samples have genotypes\n";
-      }
-
-      
-      } else {
-      if (useSparseGRMtoFitNULL || useSparseGRMforVarRatio) {
-        std::vector<std::string> sampleListwithGenov0 = readFile(sparseGRMSampleIDFile);
-        std::vector<std::string> IIDgeno;
-        for (const auto& line : sampleListwithGenov0) {
-        IIDgeno.push_back(line);
-        }
-        std::vector<int> IndexGeno(IIDgeno.size());
-        std::iota(IndexGeno.begin(), IndexGeno.end(), 1);
-        std::cout << IIDgeno.size() << " samples are in the sparse GRM\n";
-      }
-      }
-
-
-
-    // Read only the second column (sample IDs) from the fam file and store in an arma::mat
+    // Read sample IDs from the fam file
     std::ifstream famFile(params.famFile);
     if (!famFile.is_open()) {
         throw std::runtime_error("ERROR! Unable to open fam file");
@@ -1144,21 +1108,25 @@ void preprocessData(const Parameters& params) {
     }
     famFile.close();
 
-    // Convert sampleIDs to arma::mat
-    arma::mat famData(sampleIDs.size(), 1);
-    for (size_t i = 0; i < sampleIDs.size(); ++i) {
-        famData(i, 0) = std::stod(sampleIDs[i]);
-    }
-
-    arma::mat famData;
-    famData.load(params.famFile, arma::csv_ascii);
-
-    // Extract sample IDs
-    std::vector<std::string> sampleIDs;
-    for (size_t i = 0; i < famData.n_rows; ++i) {
-        sampleIDs.push_back(famData(i, 1));
-    }
-
-    // Print the number of samples with genotypes
     std::cout << sampleIDs.size() << " samples have genotypes" << std::endl;
+
+    // Check if sparse GRM files exist and read sample IDs if required
+    if (params.useSparseGRMtoFitNULL || params.useSparseGRMforVarRatio) {
+        checkFiles({params.sparseGRMSampleIDFile});
+
+        std::ifstream sparseGRMFile(params.sparseGRMSampleIDFile);
+        if (!sparseGRMFile.is_open()) {
+            throw std::runtime_error("ERROR! Unable to open sparse GRM sample ID file");
+        }
+
+        std::vector<std::string> sparseSampleIDs;
+        while (std::getline(sparseGRMFile, line)) {
+            sparseSampleIDs.push_back(line);
+        }
+        sparseGRMFile.close();
+
+        std::cout << sparseSampleIDs.size() << " samples are in the sparse GRM" << std::endl;
+    }
 }
+
+
