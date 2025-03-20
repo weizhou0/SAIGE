@@ -13,8 +13,8 @@ struct GLMResults {
     arma::vec mu;
     arma::vec W;
     arma::vec z;
-    std::string familyGLM};
-    ;
+    std::string family;
+};
 
 
 GLMResults fitGLM(const arma::mat& X, const arma::vec& y, const std::string& traitType) {
